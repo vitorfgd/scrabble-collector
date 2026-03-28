@@ -13,8 +13,8 @@ export const PLAYER_BASE_MAX_SPEED = 10.5
 export const PLAYER_START_BOOST_MULT = 1.14
 export const PLAYER_START_BOOST_DURATION_SEC = 0.12
 
-/** Ghost patrol speed (NORMAL wander) */
-export const GHOST_WANDER_SPEED = 4.55
+/** Ghost patrol speed (NORMAL wander) — slower, calmer roam */
+export const GHOST_WANDER_SPEED = 3.95
 
 /** Ghost chase speed in NORMAL (must stay < PLAYER_BASE_MAX_SPEED) */
 export const GHOST_CHASE_SPEED = 6.95

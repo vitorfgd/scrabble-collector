@@ -1,5 +1,6 @@
 import type { Group } from 'three'
 import { Color, Mesh, MeshStandardMaterial, Vector3 } from 'three'
+import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
 import { createGhostVisual } from './createGhostVisual.ts'
 import {
   DEFAULT_GHOST_SPAWNS,
@@ -7,6 +8,9 @@ import {
   GHOST_COLLISION_RADIUS,
   GHOST_DEPOSIT_EXCLUSION_RADIUS,
   GHOST_DETECT_RADIUS,
+  GHOST_DIRECTION_SMOOTH_CHASE,
+  GHOST_DIRECTION_SMOOTH_FRIGHT,
+  GHOST_DIRECTION_SMOOTH_WANDER,
   GHOST_FRIGHT_SPEED,
   GHOST_LOSE_CHASE_RADIUS,
   GHOST_MAP_HALF_X,
@@ -16,7 +20,9 @@ import {
   GHOST_POST_HIT_DISENGAGE_SPEED,
   GHOST_POST_HIT_SEPARATION,
   GHOST_RESPAWN_AFTER_EAT_SEC,
-  GHOST_STEERING_ACCEL,
+  GHOST_STEERING_ACCEL_CHASE,
+  GHOST_STEERING_ACCEL_FRIGHT,
+  GHOST_STEERING_ACCEL_WANDER,
   GHOST_WANDER_SPEED,
   GHOST_WANDER_TURN_MAX,
   GHOST_WANDER_TURN_MIN,
@@ -33,6 +39,7 @@ export class GhostSystem {
   private readonly ghosts: Ghost[] = []
   private powerModeActive = false
   private powerModeTimeSec = 0
+  private ghostAnimTime = 0
 
   constructor(
     ghostGroup: Group,
@@ -50,9 +57,19 @@ export class GhostSystem {
   }
 
   update(dt: number, playerPos: Vector3): void {
+    this.ghostAnimTime += dt
     const frightened = this.powerModeActive
+    const dr = DEFAULT_DEPOSIT_ZONE_RADIUS
+    const playerInDepositZone =
+      playerPos.x * playerPos.x + playerPos.z * playerPos.z <= dr * dr
     for (const g of this.ghosts) {
-      g.update(dt, playerPos, frightened)
+      g.update(
+        dt,
+        playerPos,
+        frightened,
+        this.ghostAnimTime,
+        playerInDepositZone,
+      )
       g.updateVulnerableAppearance(this.powerModeActive, this.powerModeTimeSec)
     }
   }
@@ -176,6 +193,9 @@ class Ghost {
   private respawnRemaining = 0
   /** While > 0, cannot transition wander → chase (after scoring a hit on the player). */
   private chaseLockout = 0
+  /** Smoothed desired direction (unit XZ) — reduces jittery heading changes */
+  private smoothedTx = 0
+  private smoothedTz = 1
 
   constructor(
     ghostGroup: Group,
@@ -191,7 +211,11 @@ class Ghost {
     this.materials = []
     this.skinSnap = []
     this.root.traverse((o) => {
-      if (o instanceof Mesh && o.material instanceof MeshStandardMaterial) {
+      if (
+        o instanceof Mesh &&
+        o.userData.isGhostBody === true &&
+        o.material instanceof MeshStandardMaterial
+      ) {
         const m = o.material
         this.materials.push(m)
         this.skinSnap.push({
@@ -248,6 +272,8 @@ class Ghost {
       this.velocity.x *= inv
       this.velocity.z *= inv
     }
+    this.smoothedTx = Math.cos(this.wanderAngle)
+    this.smoothedTz = Math.sin(this.wanderAngle)
   }
 
   private pickWanderTimer(): void {
@@ -281,7 +307,13 @@ class Ghost {
     }
   }
 
-  update(dt: number, playerPos: Vector3, frightened: boolean): void {
+  update(
+    dt: number,
+    playerPos: Vector3,
+    frightened: boolean,
+    timeSec: number,
+    playerInDepositZone: boolean,
+  ): void {
     if (this.eaten) {
       this.respawnRemaining -= dt
       if (this.respawnRemaining <= 0) {
@@ -293,6 +325,8 @@ class Ghost {
         this.chaseLockout = 0
         this.pickWanderTimer()
         this.resetSkin()
+        this.smoothedTx = 0
+        this.smoothedTz = 1
       }
       return
     }
@@ -324,6 +358,20 @@ class Ghost {
       tx = ax * inv
       tz = az * inv
       targetSpeed = GHOST_FRIGHT_SPEED
+    } else if (playerInDepositZone) {
+      if (this.state === 'chase') {
+        this.state = 'wander'
+        this.pickWanderTimer()
+        this.wanderAngle = Math.random() * Math.PI * 2
+      }
+      this.wanderTimer -= dt
+      if (this.wanderTimer <= 0) {
+        this.wanderAngle = Math.random() * Math.PI * 2
+        this.pickWanderTimer()
+      }
+      tx = Math.cos(this.wanderAngle)
+      tz = Math.sin(this.wanderAngle)
+      targetSpeed = GHOST_WANDER_SPEED
     } else {
       const detectR2 = GHOST_DETECT_RADIUS * GHOST_DETECT_RADIUS
       const loseR2 = GHOST_LOSE_CHASE_RADIUS * GHOST_LOSE_CHASE_RADIUS
@@ -366,9 +414,37 @@ class Ghost {
       }
     }
 
-    const desiredVx = tx * targetSpeed
-    const desiredVz = tz * targetSpeed
-    const k = 1 - Math.exp(-GHOST_STEERING_ACCEL * dt)
+    const rawLen = Math.hypot(tx, tz)
+    if (rawLen > 1e-5) {
+      tx /= rawLen
+      tz /= rawLen
+    }
+
+    let dirSmooth = GHOST_DIRECTION_SMOOTH_WANDER
+    if (frightened) {
+      dirSmooth = GHOST_DIRECTION_SMOOTH_FRIGHT
+    } else if (this.state === 'chase' && !playerInDepositZone) {
+      dirSmooth = GHOST_DIRECTION_SMOOTH_CHASE
+    }
+    const dirK = 1 - Math.exp(-dirSmooth * dt)
+    this.smoothedTx += (tx - this.smoothedTx) * dirK
+    this.smoothedTz += (tz - this.smoothedTz) * dirK
+    const sl = Math.hypot(this.smoothedTx, this.smoothedTz)
+    if (sl > 1e-5) {
+      this.smoothedTx /= sl
+      this.smoothedTz /= sl
+    }
+
+    const desiredVx = this.smoothedTx * targetSpeed
+    const desiredVz = this.smoothedTz * targetSpeed
+
+    let steerAccel = GHOST_STEERING_ACCEL_WANDER
+    if (frightened) {
+      steerAccel = GHOST_STEERING_ACCEL_FRIGHT
+    } else if (this.state === 'chase' && !playerInDepositZone) {
+      steerAccel = GHOST_STEERING_ACCEL_CHASE
+    }
+    const k = 1 - Math.exp(-steerAccel * dt)
     this.velocity.x += (desiredVx - this.velocity.x) * k
     this.velocity.z += (desiredVz - this.velocity.z) * k
 
@@ -379,8 +455,19 @@ class Ghost {
 
     const hs = Math.hypot(this.velocity.x, this.velocity.z)
     if (hs > 0.12) {
-      this.root.rotation.y = Math.atan2(-this.velocity.x, -this.velocity.z)
+      /** Face +Z local toward movement (eyes at +Z); matches `PlayerController` facing convention */
+      this.root.rotation.y = Math.atan2(this.velocity.x, this.velocity.z)
     }
+
+    const anim = this.root.userData.updateGhostAnimation as
+      | ((
+          dt: number,
+          timeSec: number,
+          vx: number,
+          vz: number,
+        ) => void)
+      | undefined
+    anim?.(dt, timeSec, this.velocity.x, this.velocity.z)
 
     this.applyEdgeNudge(targetSpeed)
     this.excludeFromDepositZone()
@@ -447,7 +534,9 @@ class Ghost {
     this.root.position.set(0, 0, 0)
     this.root.traverse((o) => {
       if (o instanceof Mesh) {
-        o.geometry.dispose()
+        if (!o.userData.sharedGhostGeometry) {
+          o.geometry.dispose()
+        }
         const mat = o.material
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
         else mat.dispose()

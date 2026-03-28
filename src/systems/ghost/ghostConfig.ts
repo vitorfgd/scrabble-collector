@@ -19,14 +19,23 @@ export const GHOST_DETECT_RADIUS = 6.8
  */
 export const GHOST_LOSE_CHASE_RADIUS = 9.2
 
-/**
- * How fast horizontal velocity catches the desired direction (higher = snappier).
- */
-export const GHOST_STEERING_ACCEL = 15
+/** Steering: chase / fright — snappier pursuit */
+export const GHOST_STEERING_ACCEL_CHASE = 15.5
 
-/** Seconds between new random wander headings */
-export const GHOST_WANDER_TURN_MIN = 0.85
-export const GHOST_WANDER_TURN_MAX = 2.35
+/** Steering: wander — softer, less twitchy */
+export const GHOST_STEERING_ACCEL_WANDER = 9.2
+
+/** Steering: frightened flee */
+export const GHOST_STEERING_ACCEL_FRIGHT = 12
+
+/** Lerp speed for desired direction (higher = snappier turns) */
+export const GHOST_DIRECTION_SMOOTH_WANDER = 4.2
+export const GHOST_DIRECTION_SMOOTH_CHASE = 10.5
+export const GHOST_DIRECTION_SMOOTH_FRIGHT = 4.8
+
+/** Seconds between new random wander headings (calmer = longer) */
+export const GHOST_WANDER_TURN_MIN = 1.05
+export const GHOST_WANDER_TURN_MAX = 2.85
 
 /** World bounds (XZ); ghost centers are clamped inside the playfield */
 export const GHOST_MAP_HALF_X = 18.5
@@ -39,16 +48,23 @@ export type GhostSpawnSpec = {
   color: number
 }
 
-/** Default layout: two ghosts, opposite corners */
+/** Three ghosts: red, pink, cyan — spread for readability, away from center deposit */
 export const DEFAULT_GHOST_SPAWNS: readonly GhostSpawnSpec[] = [
-  { x: -11.5, z: 9, color: 0xff3d6b },
-  { x: 11.5, z: -9, color: 0x2ee6ff },
+  { x: -11.2, z: 9.5, color: 0xff3355 },
+  { x: 11.2, z: 9.5, color: 0xff5eb5 },
+  { x: 0, z: -11.5, color: 0x22e8ff },
 ]
+
+/**
+ * Uniform mesh scale (same idea as `version3` `ENEMY_GHOST_VISUAL_SCALE` ~0.98).
+ * Slightly above 1 so they read well next to the player.
+ */
+export const GHOST_VISUAL_SCALE = 1.06
 
 // --- Player hit (ghost touch) — tension without full reset ---
 
-/** Ghost body radius for circle–circle test with player (`player.radius + this`) */
-export const GHOST_COLLISION_RADIUS = 0.44
+/** Ghost body radius for circle–circle test (~max lathe radius × `GHOST_VISUAL_SCALE`) */
+export const GHOST_COLLISION_RADIUS = 0.37
 
 /**
  * Extra clearance beyond deposit disc + ghost body so ghosts do not skim the drop zone edge.

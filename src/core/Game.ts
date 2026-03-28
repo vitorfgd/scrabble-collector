@@ -42,6 +42,7 @@ import {
   GHOST_HIT_LOSS_MAX,
   GHOST_HIT_LOSS_MIN,
 } from '../systems/ghost/ghostConfig.ts'
+import { disposeGhostSharedGeometry } from '../systems/ghost/createGhostVisual.ts'
 import { GhostSystem } from '../systems/ghost/GhostSystem.ts'
 import { ChaseWordSystem } from '../systems/chaseWord/ChaseWordSystem.ts'
 import {
@@ -852,6 +853,7 @@ export class Game {
     this.burstGroup.removeFromParent()
     this.resourceSources.dispose()
     this.ghostSystem.dispose()
+    disposeGhostSharedGeometry()
     this.joystick.dispose()
     this.unsubscribeResize()
     this.renderer.dispose()
