@@ -13,8 +13,9 @@ import {
   PERFECT_OVERLOAD_BONUS_MULT,
 } from '../overload/overloadDropConfig.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
-import type { CarryStack } from '../stack/CarryStack.ts'
-import type { StackVisual } from '../stack/StackVisual.ts'
+import type { ChainSystem } from '../chain/ChainSystem.ts'
+import type { ChainVisual } from '../chain/ChainVisual.ts'
+import { getChainMultiplierForLength } from '../chain/chainMultiplier.ts'
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from './DepositZone.ts'
 import {
   DEPOSIT_FLIGHT_DURATION_SEC,
@@ -40,8 +41,8 @@ export type DepositControllerOptions = {
   scene: Scene
   zoneRadius?: number
   player: PlayerController
-  stack: CarryStack
-  stackVisual: StackVisual
+  chain: ChainSystem
+  chainVisual: ChainVisual
   economy: Economy
   flight: DepositFlightAnimator
   evaluateOverload?: (snapshot: readonly GameItem[]) => OverloadEvalResult
@@ -64,8 +65,8 @@ export class DepositController {
   private readonly scene: Scene
   private readonly zoneRadius: number
   private readonly player: PlayerController
-  private readonly stack: CarryStack
-  private readonly stackVisual: StackVisual
+  private readonly chain: ChainSystem
+  private readonly chainVisual: ChainVisual
   private readonly economy: Economy
   private readonly flight: DepositFlightAnimator
   private readonly evaluateOverload?: (snapshot: readonly GameItem[]) => OverloadEvalResult
@@ -81,13 +82,18 @@ export class DepositController {
     null
   private peelIndex = 0
 
+  /** True while deposit session is active or an item is mid-flight — avoid chain cut fighting deposit */
+  isChainCutBlocked(): boolean {
+    return this.sessionSnapshot !== null || this.flight.busy
+  }
+
   constructor(opts: DepositControllerOptions) {
     this.depositRoot = opts.depositRoot
     this.scene = opts.scene
     this.zoneRadius = opts.zoneRadius ?? DEFAULT_DEPOSIT_ZONE_RADIUS
     this.player = opts.player
-    this.stack = opts.stack
-    this.stackVisual = opts.stackVisual
+    this.chain = opts.chain
+    this.chainVisual = opts.chainVisual
     this.economy = opts.economy
     this.flight = opts.flight
     this.evaluateOverload = opts.evaluateOverload
@@ -117,10 +123,10 @@ export class DepositController {
     if (
       inside &&
       !this.wasInside &&
-      this.stack.count > 0 &&
+      this.chain.count > 0 &&
       this.sessionSnapshot === null
     ) {
-      const snapshot = [...this.stack.getSnapshot()]
+      const snapshot = [...this.chain.getSnapshot()]
       this.sessionSnapshot = snapshot
       this.depositedIds.clear()
       const evo = this.evaluateOverload?.(snapshot) ?? {
@@ -154,17 +160,21 @@ export class DepositController {
     return Math.max(0, extra)
   }
 
+  /** One item per flight: oldest (chain tail) first, head stays until last. */
   private tryPeelNext(): void {
     if (this.sessionSnapshot === null) return
     if (this.flight.busy) return
 
-    if (this.stack.count === 0) {
+    if (this.chain.count === 0) {
       const snapshot = this.sessionSnapshot
       this.sessionSnapshot = null
       this.depositedIds.clear()
       const ev = evaluateDeposit(snapshot)
       const overloadBonus = this.computeOverloadExtra(ev)
-      this.economy.addMoney(ev.credits + overloadBonus)
+      const mult = getChainMultiplierForLength(snapshot.length)
+      this.economy.addMoney(
+        Math.floor((ev.credits + overloadBonus) * mult),
+      )
       const s = this.sessionOverload
       this.sessionOverload = null
       this.peelIndex = 0
@@ -177,7 +187,7 @@ export class DepositController {
       return
     }
 
-    const item = this.stack.popFromTop({ silent: true })
+    const item = this.chain.popFromTail({ silent: true })
     if (!item) {
       this.sessionSnapshot = null
       this.sessionOverload = null
@@ -186,8 +196,8 @@ export class DepositController {
       this.depositedIds.clear()
       return
     }
-    const mesh = this.stackVisual.extractTopMeshForDeposit(item)
-    this.stack.notifyChange()
+    const mesh = this.chainVisual.extractTailMeshForDeposit(item)
+    this.chain.notifyChange()
     this.depositRoot.getWorldPosition(center)
     const spiralIndex = this.peelIndex
     this.peelIndex += 1
@@ -231,8 +241,11 @@ export class DepositController {
 
     const ev = evaluateDeposit(completed)
     const overloadBonus = this.computeOverloadExtra(ev)
-    this.economy.addMoney(ev.credits + overloadBonus)
-    this.stack.replaceItems(remaining)
+    const mult = getChainMultiplierForLength(snapshot.length)
+    this.economy.addMoney(
+      Math.floor((ev.credits + overloadBonus) * mult),
+    )
+    this.chain.replaceItems(remaining)
     this.depositedIds.clear()
     this.sessionOverload = null
     this.peelIndex = 0

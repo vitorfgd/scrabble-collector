@@ -18,6 +18,8 @@ export class CameraRig {
   private readonly target: Group
   private readonly smooth: number
   private readonly getStackCount: () => number
+  private shakeT = 0
+  private shakeMag = 0
 
   constructor(
     camera: PerspectiveCamera,
@@ -31,6 +33,13 @@ export class CameraRig {
     this.smooth = smooth
   }
 
+  /** Brief positional jitter (world units peak); stacks coarsely for bigger hits */
+  impulseShake(magnitude: number, durationSec: number): void {
+    if (magnitude <= 0 || durationSec <= 0) return
+    this.shakeMag = Math.max(this.shakeMag, magnitude)
+    this.shakeT = Math.max(this.shakeT, durationSec)
+  }
+
   update(dt: number): void {
     this.target.getWorldPosition(playerPos)
     const n = this.getStackCount()
@@ -41,6 +50,16 @@ export class CameraRig {
       CAMERA_OFFSET_BASE.z + zoom * CAMERA_STACK_ZOOM_Z,
     )
     desired.copy(playerPos).add(offsetWithZoom)
+    if (this.shakeT > 0 && this.shakeMag > 0) {
+      const s = this.shakeMag
+      desired.x += (Math.random() - 0.5) * 2 * s
+      desired.z += (Math.random() - 0.5) * 2 * s
+      this.shakeT -= dt
+      if (this.shakeT <= 0) {
+        this.shakeT = 0
+        this.shakeMag = 0
+      }
+    }
     const k = 1 - Math.exp(-this.smooth * dt)
     this.camera.position.lerp(desired, k)
     this.camera.lookAt(playerPos)

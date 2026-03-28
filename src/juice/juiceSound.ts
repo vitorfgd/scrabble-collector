@@ -5,6 +5,9 @@ export type JuiceSoundId =
   | 'deposit_complete'
   | 'money_tick'
   | 'overload_impact'
+  | 'chain_cut'
+  | 'power_pickup'
+  | 'power_enemy'
 
 export function playJuiceSound(_id: JuiceSoundId): void {
   // Intentionally empty — swap for AudioBufferSource or asset pipeline.

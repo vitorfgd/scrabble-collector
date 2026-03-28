@@ -21,3 +21,7 @@ export type GameItem =
       /** Single A–Z character for tile display and future word rules */
       letter: string
     })
+  | (ItemCore & {
+      kind: 'collectible'
+      type: 'powerPellet'
+    })

@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import type { CarryStack } from '../stack/CarryStack.ts'
+import type { ChainSystem } from '../chain/ChainSystem.ts'
 import type { ItemWorld } from '../items/ItemWorld.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
 import {
@@ -15,9 +15,10 @@ export class CollectionSystem {
 
   update(
     player: PlayerController,
-    stack: CarryStack,
+    chain: ChainSystem,
     itemWorld: ItemWorld,
     dt: number,
+    onPowerPellet?: () => void,
   ): void {
     player.getPosition(p)
     itemWorld.applyMagnetPull(
@@ -35,7 +36,12 @@ export class CollectionSystem {
       const dx = p.x - mesh.position.x
       const dz = p.z - mesh.position.z
       if (dx * dx + dz * dz <= r2) {
-        if (stack.push(item)) {
+        if (item.type === 'powerPellet') {
+          itemWorld.detachPickupForCollect(id)
+          onPowerPellet?.()
+          continue
+        }
+        if (chain.push(item)) {
           itemWorld.detachPickupForCollect(id)
         }
       }

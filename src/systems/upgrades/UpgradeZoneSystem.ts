@@ -2,7 +2,7 @@ import { Vector3 } from 'three'
 import type { Group } from 'three'
 import type { Economy } from '../economy/Economy.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
-import type { CarryStack } from '../stack/CarryStack.ts'
+import type { ChainSystem } from '../chain/ChainSystem.ts'
 import {
   INITIAL_STACK_CAPACITY,
   MAX_CAPACITY_UPGRADE_LEVELS,
@@ -20,7 +20,7 @@ const center = new Vector3()
 export type UpgradeZoneSystemOptions = {
   economy: Economy
   player: PlayerController
-  stack: CarryStack
+  chain: ChainSystem
   capacityPad: {
     root: Group
     setLabel: (p: PadLabelPayload) => void
@@ -43,7 +43,7 @@ export type UpgradeZoneSystemOptions = {
 export class UpgradeZoneSystem {
   private readonly economy: Economy
   private readonly player: PlayerController
-  private readonly stack: CarryStack
+  private readonly chain: ChainSystem
   private readonly capacityPad: UpgradeZoneSystemOptions['capacityPad']
   private readonly speedPad: UpgradeZoneSystemOptions['speedPad']
   private readonly onSpendVfx?: UpgradeZoneSystemOptions['onSpendVfx']
@@ -56,7 +56,7 @@ export class UpgradeZoneSystem {
   constructor(opts: UpgradeZoneSystemOptions) {
     this.economy = opts.economy
     this.player = opts.player
-    this.stack = opts.stack
+    this.chain = opts.chain
     this.capacityPad = opts.capacityPad
     this.speedPad = opts.speedPad
     this.onSpendVfx = opts.onSpendVfx
@@ -73,7 +73,7 @@ export class UpgradeZoneSystem {
         const cost = capacityUpgradeCost(this.capacityUpgradeLevel)
         if (this.economy.trySpend(cost)) {
           this.capacityUpgradeLevel += 1
-          this.stack.setMaxCapacity(
+          this.chain.setMaxCapacity(
             INITIAL_STACK_CAPACITY + this.capacityUpgradeLevel,
           )
           this.capacityPad.root.getWorldPosition(center)

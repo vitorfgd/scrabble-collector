@@ -34,7 +34,11 @@ export class ItemWorld {
     mesh.position.set(x, y, z)
     attachPickupIdleMotion(
       mesh,
-      item.type === 'letter' ? 'letter' : 'crystal',
+      item.type === 'letter'
+        ? 'letter'
+        : item.type === 'powerPellet'
+          ? 'crystal'
+          : 'crystal',
     )
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
@@ -117,6 +121,13 @@ export class ItemWorld {
   /** Current number of pickups in the world (for spawn throttling) */
   getPickupCount(): number {
     return this.byId.size
+  }
+
+  hasItemType(type: GameItem['type']): boolean {
+    for (const [, { item }] of this.byId) {
+      if (item.type === type) return true
+    }
+    return false
   }
 
   entries(): IterableIterator<[string, Entry]> {

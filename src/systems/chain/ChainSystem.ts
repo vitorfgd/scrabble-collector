@@ -1,6 +1,10 @@
 import type { GameItem } from '../../core/types/GameItem.ts'
 
-export class CarryStack {
+/**
+ * Carried item list (order = collection order: oldest → newest).
+ * Same semantics as the former stack for deposit / HUD / upgrades.
+ */
+export class ChainSystem {
   private readonly items: GameItem[] = []
   private max: number
   private readonly onChange?: () => void
@@ -42,7 +46,7 @@ export class CarryStack {
     return out
   }
 
-  /** Remove top-of-stack item (last pushed). Use silent + notifyChange for coordinated visuals. */
+  /** Remove most recently collected item (newest / chain head). Use silent + notifyChange for coordinated visuals. */
   popFromTop(opts?: { silent?: boolean }): GameItem | undefined {
     const it = this.items.pop()
     if (!it) return undefined
@@ -50,7 +54,15 @@ export class CarryStack {
     return it
   }
 
-  /** Fire onChange after silent pop + StackVisual handoff (HUD + sync). */
+  /** Remove oldest collected item (chain tail). Used for deposit peel order. */
+  popFromTail(opts?: { silent?: boolean }): GameItem | undefined {
+    const it = this.items.shift()
+    if (!it) return undefined
+    if (!opts?.silent) this.onChange?.()
+    return it
+  }
+
+  /** Fire onChange after silent pop + ChainVisual handoff (HUD + sync). */
   notifyChange(): void {
     this.onChange?.()
   }
@@ -70,5 +82,25 @@ export class CarryStack {
 
   getSnapshot(): readonly GameItem[] {
     return this.items
+  }
+
+  /**
+   * Drop oldest items; keep the `keepCount` newest (still in collection order oldest→newest).
+   * Returns removed items (oldest first).
+   */
+  truncateKeepNewest(keepCount: number): GameItem[] {
+    const n = this.items.length
+    if (keepCount < 0) return []
+    if (keepCount >= n) return []
+    if (keepCount === 0) {
+      const lost = this.items.slice()
+      this.items.length = 0
+      this.onChange?.()
+      return lost
+    }
+    const lost = this.items.slice(0, n - keepCount)
+    this.items.splice(0, n - keepCount)
+    this.onChange?.()
+    return lost
   }
 }

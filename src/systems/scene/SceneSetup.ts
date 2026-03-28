@@ -28,6 +28,10 @@ export type SceneContents = {
   stackAnchor: Object3D
   /** World-space group for pickup meshes */
   pickupGroup: Group
+  /** World-space group for carried chain meshes (trails behind player) */
+  chainGroup: Group
+  /** Enemies (chain cutters) */
+  enemyGroup: Group
   /** Deposit zone root (visual + logical center) */
   depositRoot: Group
   depositZoneMesh: MeshType
@@ -133,6 +137,14 @@ export function createScene(): SceneContents {
   const pickupGroup = new Group()
   scene.add(pickupGroup)
 
+  const chainGroup = new Group()
+  chainGroup.name = 'chain'
+  scene.add(chainGroup)
+
+  const enemyGroup = new Group()
+  enemyGroup.name = 'enemies'
+  scene.add(enemyGroup)
+
   const depositRoot = new Group()
   depositRoot.position.set(0, 0, 0)
   scene.add(depositRoot)
@@ -196,6 +208,8 @@ export function createScene(): SceneContents {
     playerRoot,
     stackAnchor: character.stackAnchor,
     pickupGroup,
+    chainGroup,
+    enemyGroup,
     depositRoot,
     depositZoneMesh,
     depositRingMesh,

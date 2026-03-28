@@ -139,7 +139,10 @@ export class ChaseWordSystem {
    * Chase letters from this deposit merge into a running total; when that covers the multiset,
    * award bonus and roll target (works across several partial deposits).
    */
-  processLetterDeposit(items: GameItem[]): ChaseWordDepositResult {
+  processLetterDeposit(
+    items: GameItem[],
+    depositChainMultiplier: number,
+  ): ChaseWordDepositResult {
     if (this.getSpawnMode() !== 'letter' || !this.activeWord) {
       return { chaseCompleted: false, completedWord: null, bonusCredits: 0 }
     }
@@ -160,7 +163,9 @@ export class ChaseWordSystem {
     }
 
     const bonus = computeChaseWordBonus(target.length)
-    this.economy.addMoney(bonus)
+    const m = Math.max(1, Math.floor(depositChainMultiplier))
+    const paid = Math.floor(bonus * m)
+    this.economy.addMoney(paid)
     const completedWord = target
     this.bankedTowardChase.clear()
     this.depositedTowardChase.clear()
@@ -170,7 +175,7 @@ export class ChaseWordSystem {
     return {
       chaseCompleted: true,
       completedWord,
-      bonusCredits: bonus,
+      bonusCredits: paid,
     }
   }
 }

@@ -1,7 +1,7 @@
 import { Vector3 } from 'three'
 import type { Group } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
-import type { CarryStack } from '../stack/CarryStack.ts'
+import type { ChainSystem } from '../chain/ChainSystem.ts'
 import type { Economy } from '../economy/Economy.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from './DepositZone.ts'
@@ -36,7 +36,7 @@ export class DepositSystem {
 
   update(
     player: PlayerController,
-    stack: CarryStack,
+    chain: ChainSystem,
     economy: Economy,
   ): void {
     this.depositRoot.getWorldPosition(center)
@@ -45,8 +45,8 @@ export class DepositSystem {
     const dz = p.z - center.z
     const inside = dx * dx + dz * dz <= this.zoneRadius * this.zoneRadius
 
-    if (inside && !this.wasInside && stack.count > 0) {
-      const items = stack.drain()
+    if (inside && !this.wasInside && chain.count > 0) {
+      const items = chain.drain()
       const credits = economy.payout(items)
       this.onDeposited?.(items, credits)
     }

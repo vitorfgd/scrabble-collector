@@ -482,6 +482,7 @@ export function evaluateDeposit(items: GameItem[]): DepositEval {
   const letters: string[] = []
 
   for (const it of items) {
+    if (it.type === 'powerPellet') continue
     if (it.type === 'letter') {
       letters.push(it.letter)
       letterValueSum += it.value

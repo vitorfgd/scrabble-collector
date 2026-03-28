@@ -1,18 +1,20 @@
-# Deploy Vite builds to subfolders on gh-pages so both versions coexist:
+# Deploy Vite builds to subfolders on gh-pages so all versions coexist:
 #   https://<user>.github.io/scrabble-collector/version1/
 #   https://<user>.github.io/scrabble-collector/version2/
+#   https://<user>.github.io/scrabble-collector/version3/
 #
-# - Push to `main`  → build with base /scrabble-collector/version1/ → deploy to version1/
-# - Push to `version2` → build with base /scrabble-collector/version2/ → deploy to version2/
+# - Push to `main`     → base /scrabble-collector/version1/ → deploy to version1/
+# - Push to `version2` → base /scrabble-collector/version2/ → deploy to version2/
+# - Push to `version3` → base /scrabble-collector/version3/ → deploy to version3/
 #
 # Repo Settings → Pages → Source: Deploy from branch → gh-pages / (root)
-# (Switch from “GitHub Actions” artifact deploy if you used that before.)
+# keep_files: true preserves other version folders on each deploy.
 
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, version2]
+    branches: [main, version2, version3]
 
 permissions:
   contents: write
@@ -37,12 +39,19 @@ jobs:
         id: paths
         run: |
           REPO="${{ github.event.repository.name }}"
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          REF="${{ github.ref_name }}"
+          if [ "$REF" = "main" ]; then
             echo "base=/${REPO}/version1/" >> $GITHUB_OUTPUT
             echo "dest=version1" >> $GITHUB_OUTPUT
-          else
+          elif [ "$REF" = "version2" ]; then
             echo "base=/${REPO}/version2/" >> $GITHUB_OUTPUT
             echo "dest=version2" >> $GITHUB_OUTPUT
+          elif [ "$REF" = "version3" ]; then
+            echo "base=/${REPO}/version3/" >> $GITHUB_OUTPUT
+            echo "dest=version3" >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported branch for Pages deploy: $REF" >&2
+            exit 1
           fi
 
       - name: Install

@@ -12,8 +12,8 @@ export const MAGNET_PULL_SPEED = 5.5
 /** World pickup collect pop duration (ItemWorld) */
 export const COLLECT_POP_SEC = 0.22
 
-/** Deposit flight — keep short for snappy feel */
-export const DEPOSIT_FLIGHT_DURATION_SEC = 0.1
+/** Deposit flight — short peel chain toward deposit zone */
+export const DEPOSIT_FLIGHT_DURATION_SEC = 0.088
 export const DEPOSIT_ARC_HEIGHT = 0.72
 export const DEPOSIT_ARC_EASE = 2.15
 
