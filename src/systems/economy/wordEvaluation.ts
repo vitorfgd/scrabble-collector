@@ -1,4 +1,5 @@
 import type { GameItem } from '../../core/types/GameItem.ts'
+import { applyDepositBatchScaling } from './depositScaling.ts'
 
 /** Small built-in list for “valid word” checks; extend or replace with a real dictionary later */
 const WORDS = new Set(
@@ -469,14 +470,25 @@ const WORDS = new Set(
 )
 
 export type DepositEval = {
+  /** Final payout after batch multiplier */
   credits: number
+  /** Sum from crystal/letter rules before batch scaling */
+  baseCredits: number
+  /** Applied multiplier from stack size (1 = no bonus) */
+  batchMultiplier: number
+  itemCount: number
   /** Letters carried in stack order, or empty if no letter items */
   letterWord: string
   /** null = no letter items in batch; otherwise dictionary result */
   wordValid: boolean | null
 }
 
-export function evaluateDeposit(items: GameItem[]): DepositEval {
+/** Raw payout from item values + word rules — before batch risk/reward scaling. */
+function evaluateDepositBaseCredits(items: GameItem[]): {
+  baseCredits: number
+  letterWord: string
+  wordValid: boolean | null
+} {
   let crystalValue = 0
   let letterValueSum = 0
   const letters: string[] = []
@@ -485,7 +497,7 @@ export function evaluateDeposit(items: GameItem[]): DepositEval {
     if (it.type === 'letter') {
       letters.push(it.letter)
       letterValueSum += it.value
-    } else {
+    } else if (it.type === 'crystal') {
       crystalValue += it.value
     }
   }
@@ -494,7 +506,7 @@ export function evaluateDeposit(items: GameItem[]): DepositEval {
 
   if (letterWord.length === 0) {
     return {
-      credits: crystalValue,
+      baseCredits: crystalValue,
       letterWord: '',
       wordValid: null,
     }
@@ -505,15 +517,34 @@ export function evaluateDeposit(items: GameItem[]): DepositEval {
 
   if (valid) {
     return {
-      credits: crystalValue + letterValueSum + wordBonus,
+      baseCredits: crystalValue + letterValueSum + wordBonus,
       letterWord,
       wordValid: true,
     }
   }
 
   return {
-    credits: crystalValue + Math.floor(letterValueSum * 0.45),
+    baseCredits: crystalValue + Math.floor(letterValueSum * 0.45),
     letterWord,
     wordValid: false,
   }
+}
+
+export function evaluateDeposit(items: GameItem[]): DepositEval {
+  const n = items.length
+  const base = evaluateDepositBaseCredits(items)
+  const scaled = applyDepositBatchScaling(base.baseCredits, n)
+  return {
+    credits: scaled.credits,
+    baseCredits: base.baseCredits,
+    batchMultiplier: scaled.batchMultiplier,
+    itemCount: n,
+    letterWord: base.letterWord,
+    wordValid: base.wordValid,
+  }
+}
+
+/** HUD / planning: expected payout if you banked the current stack now. */
+export function previewCarryPayout(items: readonly GameItem[]): number {
+  return evaluateDeposit([...items]).credits
 }

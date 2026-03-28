@@ -83,6 +83,24 @@ export class ChaseWordSystem {
     this.onStateChanged()
   }
 
+  /**
+   * When pellets are lost from the carry stack (e.g. ghost hit), reverse banked chase
+   * counts for removed letter items — mirrors `onLetterCollected` for popped items.
+   */
+  onLettersRemovedFromCarry(items: readonly GameItem[]): void {
+    if (this.getSpawnMode() !== 'letter' || !this.activeWord) return
+    const need = multisetNeedFromWord(this.activeWord)
+    for (const item of items) {
+      if (item.type !== 'letter') continue
+      const raw = item.letter.toUpperCase().replace(/[^A-Z]/g, '')
+      const ch = raw.slice(0, 1)
+      if (!ch || !need.has(ch)) continue
+      const cur = this.bankedTowardChase.get(ch) ?? 0
+      if (cur > 0) this.bankedTowardChase.set(ch, cur - 1)
+    }
+    this.onStateChanged()
+  }
+
   /** Progress line e.g. "S _ O _ E" from letters banked toward this chase */
   getProgressLine(): string {
     const target = this.getActiveTarget()

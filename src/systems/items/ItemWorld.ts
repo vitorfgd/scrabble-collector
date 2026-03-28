@@ -1,4 +1,11 @@
-import type { Group, Mesh, Scene } from 'three'
+import {
+  Mesh,
+  Sprite,
+  SpriteMaterial,
+  type Group,
+  type Object3D,
+  type Scene,
+} from 'three'
 import type { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createPickupMesh } from './ItemVisuals.ts'
@@ -8,9 +15,9 @@ import {
 } from './PickupMotion.ts'
 import { COLLECT_POP_SEC } from '../../juice/juiceConfig.ts'
 
-type Entry = { mesh: Mesh; item: GameItem }
+type Entry = { mesh: Object3D; item: GameItem }
 
-type CollectAnim = { mesh: Mesh; t: number }
+type CollectAnim = { mesh: Object3D; t: number }
 
 /**
  * Owns world pickups: logical `GameItem` + Three.js mesh.
@@ -34,7 +41,7 @@ export class ItemWorld {
     mesh.position.set(x, y, z)
     attachPickupIdleMotion(
       mesh,
-      item.type === 'letter' ? 'letter' : 'crystal',
+      item.type === 'letter' ? 'letterPellet' : 'pellet',
     )
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
@@ -119,21 +126,51 @@ export class ItemWorld {
     return this.byId.size
   }
 
+  hasPickup(id: string): boolean {
+    return this.byId.has(id)
+  }
+
   entries(): IterableIterator<[string, Entry]> {
     return this.byId.entries()
   }
 
   updateVisuals(timeSec: number, dt: number): void {
-    for (const [, { mesh }] of this.byId) {
+    for (const [, { mesh, item }] of this.byId) {
       updatePickupIdleMotion(mesh, timeSec, dt)
+      if (item.type === 'powerPellet') {
+        const body = mesh.userData.powerPelletBody as Mesh | undefined
+        const halo = mesh.userData.powerPelletHalo as Mesh | undefined
+        if (body) {
+          const pulse = 0.94 + 0.06 * Math.sin(timeSec * 5.6)
+          body.scale.setScalar(pulse)
+        }
+        if (halo) {
+          const hp = 0.97 + 0.08 * Math.sin(timeSec * 4.15 + 0.9)
+          halo.scale.setScalar(hp)
+          const hm = halo.material
+          if (hm && !Array.isArray(hm) && 'emissiveIntensity' in hm) {
+            hm.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(timeSec * 6.1))
+          }
+        }
+      }
     }
   }
 
-  private disposeMesh(mesh: Mesh): void {
-    mesh.removeFromParent()
-    mesh.geometry.dispose()
-    const m = mesh.material
-    if (Array.isArray(m)) m.forEach((mat) => mat.dispose())
-    else m.dispose()
+  private disposeMesh(root: Object3D): void {
+    root.removeFromParent()
+    root.traverse((o) => {
+      if (o instanceof Sprite) {
+        const m = o.material as SpriteMaterial
+        m.map?.dispose()
+        m.dispose()
+        return
+      }
+      if (o instanceof Mesh) {
+        o.geometry.dispose()
+        const m = o.material
+        if (Array.isArray(m)) m.forEach((mat) => mat.dispose())
+        else m.dispose()
+      }
+    })
   }
 }

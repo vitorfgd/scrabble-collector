@@ -3,7 +3,10 @@ import type { GameItem } from '../../core/types/GameItem.ts'
 import type { ItemSpawnMode } from '../items/spawnMode.ts'
 import type { ItemWorld } from '../items/ItemWorld.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
-import { randomPointInDisk } from './spawnDisk.ts'
+import {
+  projectPointToDisk,
+  randomPointInDisk,
+} from './spawnDisk.ts'
 import type { SourceNodeConfig } from './sourceTypes.ts'
 import type { SourceNodeVisualHandle } from './SourceNodeVisual.ts'
 
@@ -14,6 +17,9 @@ const BASE_SPAWN_INTERVAL_SEC = 2.75
 const ACCEL_INTERVAL_FACTOR = 2.85
 const DEPOSIT_CLEAR = { x: 0, z: 0, r: 3.4 }
 const SPAWN_ATTEMPTS = 14
+/** Bias successive spawns into short trails (Pac-style paths) inside each disk */
+const PATH_STEP = 0.48
+const PATH_CONTINUE_CHANCE = 0.74
 
 /**
  * One resource source: timed spawns inside a disk.
@@ -32,6 +38,8 @@ export class SourceNode {
 
   private cooldown: number
   private stillTimer = 0
+  /** Previous spawn in this zone — used to chain pellets along a loose path */
+  private trailXZ: { x: number; z: number } | null = null
 
   constructor(
     config: SourceNodeConfig,
@@ -58,6 +66,7 @@ export class SourceNode {
   resetCooldown(stagger: number): void {
     this.cooldown = stagger
     this.stillTimer = 0
+    this.trailXZ = null
   }
 
   update(dt: number, timeSec: number): void {
@@ -103,13 +112,23 @@ export class SourceNode {
   }
 
   private trySpawnOne(): void {
+    const cx = this.config.worldX
+    const cz = this.config.worldZ
+    const R = this.config.spawnRadius
     for (let a = 0; a < SPAWN_ATTEMPTS; a++) {
-      const [x, z] = randomPointInDisk(
-        this.config.worldX,
-        this.config.worldZ,
-        this.config.spawnRadius,
-      )
+      let x: number
+      let z: number
+      if (this.trailXZ && Math.random() < PATH_CONTINUE_CHANCE) {
+        x =
+          this.trailXZ.x + (Math.random() - 0.5) * 2 * PATH_STEP
+        z =
+          this.trailXZ.z + (Math.random() - 0.5) * 2 * PATH_STEP
+        ;[x, z] = projectPointToDisk(cx, cz, R * 0.998, x, z)
+      } else {
+        ;[x, z] = randomPointInDisk(cx, cz, R)
+      }
       if (tooCloseToDeposit(x, z)) continue
+      this.trailXZ = { x, z }
       const item = this.makeItem()
       this.itemWorld.spawn(item, x, z)
       return

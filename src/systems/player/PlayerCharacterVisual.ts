@@ -17,6 +17,10 @@ export type PlayerCharacterAnimState = {
   velX: number
   itemsCarried: number
   maxCarry: number
+  /** Power pellet mode — shirt tint / emissive */
+  powerMode?: boolean
+  /** Ghost hit i-frames — blink read */
+  ghostInvuln?: boolean
 }
 
 /**
@@ -31,6 +35,8 @@ export class PlayerCharacterVisual {
   private readonly bobGroup: Group
   private readonly leanGroup: Group
   private readonly baseBobY: number
+  private readonly shirtMat: MeshStandardMaterial
+  private readonly shirtColorSnap: Color
 
   constructor() {
     this.root = new Group()
@@ -54,6 +60,8 @@ export class PlayerCharacterVisual {
       roughness: 0.55,
       metalness: 0.05,
     })
+    this.shirtMat = shirt
+    this.shirtColorSnap = shirt.color.clone()
     const dark = new MeshStandardMaterial({
       color: new Color(0x2a2a34),
       roughness: 0.7,
@@ -99,6 +107,26 @@ export class PlayerCharacterVisual {
    */
   update(_dt: number, state: PlayerCharacterAnimState): void {
     const { timeSec, speed, velX, itemsCarried, maxCarry } = state
+    const power = state.powerMode === true
+    const invuln = state.ghostInvuln === true
+
+    if (invuln) {
+      const blink = 0.5 + 0.5 * Math.sin(timeSec * 14)
+      const on = blink > 0.52
+      this.shirtMat.color
+        .copy(this.shirtColorSnap)
+        .lerp(new Color(0xffffff), on ? 0.38 : 0.06)
+      this.shirtMat.emissive.setHex(on ? 0xccddee : 0x223344)
+      this.shirtMat.emissiveIntensity = on ? 0.42 : 0.08
+    } else if (power) {
+      this.shirtMat.color.copy(this.shirtColorSnap).lerp(new Color(0x4ee8ff), 0.45)
+      this.shirtMat.emissive.setHex(0x1a6a8a)
+      this.shirtMat.emissiveIntensity = 0.28
+    } else {
+      this.shirtMat.color.copy(this.shirtColorSnap)
+      this.shirtMat.emissive.setHex(0x000000)
+      this.shirtMat.emissiveIntensity = 0
+    }
     const moving = speed > 0.35
     const carryT = maxCarry > 0 ? itemsCarried / maxCarry : 0
 

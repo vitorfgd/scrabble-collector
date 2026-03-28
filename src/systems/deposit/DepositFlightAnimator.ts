@@ -1,6 +1,5 @@
-import type { Mesh } from 'three'
-import type { Scene } from 'three'
-import { Vector3 } from 'three'
+import type { Object3D, Scene } from 'three'
+import { Mesh, Sprite, SpriteMaterial, Vector3 } from 'three'
 import {
   DEPOSIT_ARC_EASE,
   DEPOSIT_ARC_HEIGHT,
@@ -28,7 +27,7 @@ export class DepositFlightAnimator {
   private active = false
   private scene: Scene | null = null
   private t = 0
-  private mesh: Mesh | null = null
+  private mesh: Object3D | null = null
   private durationSec = DEPOSIT_FLIGHT_DURATION_SEC
   private readonly start = new Vector3()
   private readonly end = new Vector3()
@@ -54,7 +53,7 @@ export class DepositFlightAnimator {
 
   startOne(
     scene: Scene,
-    mesh: Mesh,
+    mesh: Object3D,
     depositWorldPos: Vector3,
     onComplete: () => void,
     durationSec: number = DEPOSIT_FLIGHT_DURATION_SEC,
@@ -138,12 +137,22 @@ export class DepositFlightAnimator {
     }
   }
 
-  private disposeMesh(mesh: Mesh): void {
-    this.scene?.remove(mesh)
-    mesh.geometry.dispose()
-    const mat = mesh.material
-    if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
-    else mat.dispose()
+  private disposeMesh(root: Object3D): void {
+    this.scene?.remove(root)
+    root.traverse((o) => {
+      if (o instanceof Sprite) {
+        const sm = o.material as SpriteMaterial
+        sm.map?.dispose()
+        sm.dispose()
+        return
+      }
+      if (o instanceof Mesh) {
+        o.geometry.dispose()
+        const mat = o.material
+        if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
+        else mat.dispose()
+      }
+    })
   }
 
   private finish(): void {

@@ -13,6 +13,9 @@
   <body>
     <div id="app">
       <div id="game-viewport" aria-label="Game view">
+        <div id="hud-hit-flash" class="hud-hit-flash" aria-hidden="true"></div>
+        <div id="hud-power-tint" class="hud-power-tint" aria-hidden="true"></div>
+        <div id="hud-power-timer" class="hud-power-timer hidden" aria-hidden="true"></div>
         <div id="hud-bootstrap" class="hud-bootstrap" aria-hidden="true">
           Collect!
         </div>
@@ -36,6 +39,7 @@
           <div id="hud-letters" hidden></div>
           <div id="hud-row">
             <span id="hud-carry">0 / 10</span>
+            <span id="hud-carry-value" class="hud-carry-value" hidden title="Estimated payout if you deposit now">≈ $0</span>
             <span id="hud-money">$0</span>
           </div>
           <div id="hud-spawn" class="hud-spawn"></div>

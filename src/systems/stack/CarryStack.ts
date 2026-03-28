@@ -50,6 +50,22 @@ export class CarryStack {
     return it
   }
 
+  /**
+   * Pop up to `n` items from the top (most recently collected first).
+   * Returns removed items in pop order (newest first).
+   */
+  popManyFromTop(n: number): GameItem[] {
+    const take = Math.min(Math.max(0, Math.floor(n)), this.items.length)
+    if (take === 0) return []
+    const out: GameItem[] = []
+    for (let i = 0; i < take; i++) {
+      const it = this.items.pop()
+      if (it) out.push(it)
+    }
+    this.onChange?.()
+    return out
+  }
+
   /** Fire onChange after silent pop + StackVisual handoff (HUD + sync). */
   notifyChange(): void {
     this.onChange?.()

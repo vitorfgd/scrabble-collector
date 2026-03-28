@@ -1,8 +1,7 @@
-import type { Group } from 'three'
 import type { PerspectiveCamera } from 'three'
 import type { Scene } from 'three'
 import type { WebGLRenderer } from 'three'
-import { Vector3 } from 'three'
+import { Group, Vector3 } from 'three'
 import { CameraRig } from '../systems/camera/CameraRig.ts'
 import { CollectionSystem } from '../systems/collection/CollectionSystem.ts'
 import {
@@ -12,7 +11,10 @@ import {
 import { DepositFlightAnimator } from '../systems/deposit/DepositFlightAnimator.ts'
 import { DepositZoneFeedback } from '../systems/deposit/DepositZoneFeedback.ts'
 import { Economy } from '../systems/economy/Economy.ts'
-import type { DepositEval } from '../systems/economy/wordEvaluation.ts'
+import {
+  previewCarryPayout,
+  type DepositEval,
+} from '../systems/economy/wordEvaluation.ts'
 import { TouchJoystick } from '../systems/input/TouchJoystick.ts'
 import { ItemWorld } from '../systems/items/ItemWorld.ts'
 import { ResourceSourceSystem } from '../systems/sources/ResourceSourceSystem.ts'
@@ -34,6 +36,13 @@ import type { ItemSpawnMode } from '../systems/items/spawnMode.ts'
 import { UpgradeZoneSystem } from '../systems/upgrades/UpgradeZoneSystem.ts'
 import { INITIAL_STACK_CAPACITY } from '../systems/upgrades/upgradeConfig.ts'
 import { spawnUpgradeSpendCoins } from '../systems/upgrades/upgradeSpendVfx.ts'
+import {
+  GHOST_EAT_MONEY_REWARD,
+  GHOST_HIT_INVULN_SEC,
+  GHOST_HIT_LOSS_MAX,
+  GHOST_HIT_LOSS_MIN,
+} from '../systems/ghost/ghostConfig.ts'
+import { GhostSystem } from '../systems/ghost/GhostSystem.ts'
 import { ChaseWordSystem } from '../systems/chaseWord/ChaseWordSystem.ts'
 import {
   DEFAULT_RESOURCE_SOURCES,
@@ -48,6 +57,17 @@ import { OVERLOAD_STACK_THRESHOLD } from '../systems/overload/overloadDropConfig
 import { MoneyHud } from '../juice/MoneyHud.ts'
 import { spawnFloatingHudText } from '../juice/floatingHud.ts'
 import { playJuiceSound } from '../juice/juiceSound.ts'
+import {
+  disposeAllGhostHitBursts,
+  spawnGhostHitPelletBurst,
+  updateGhostHitBursts,
+  type GhostHitBurstParticle,
+} from '../juice/ghostHitPelletBurst.ts'
+import { PowerPelletSpawner } from '../systems/powerPellet/PowerPelletSpawner.ts'
+import {
+  POWER_MODE_DURATION_SEC,
+  POWER_MODE_SPEED_MULTIPLIER,
+} from '../systems/powerPellet/powerPelletConfig.ts'
 
 const DEPOSIT_TOAST_MS = 2800
 const CHASE_TOAST_MS = 3200
@@ -87,6 +107,19 @@ export class Game {
   private readonly playerCharacter: PlayerCharacterVisual
   private readonly upgradeZones: UpgradeZoneSystem
   private readonly resourceSources: ResourceSourceSystem
+  private readonly ghostSystem: GhostSystem
+  private readonly powerPelletSpawner: PowerPelletSpawner
+  private powerModeRemaining = 0
+  private powerTintEl: HTMLElement | null = null
+  private powerTimerEl: HTMLElement | null = null
+  private readonly burstGroup: Group
+  private readonly burstParticles: GhostHitBurstParticle[] = []
+  private readonly burstSpawnScratch = new Vector3()
+  private ghostHitInvuln = 0
+  /** False until player leaves ghost melee+padding after a hit (stops overlap spam). */
+  private ghostDamageArmed = true
+  private hitFlashEl: HTMLElement | null = null
+  private hitFlashTimer: ReturnType<typeof setTimeout> | null = null
   private readonly letterZoneDebugRoot: Group
   private readonly hostEl: HTMLElement
   private readonly chaseWord: ChaseWordSystem
@@ -108,6 +141,7 @@ export class Game {
   private bootstrapHintEl: HTMLElement | null = null
   private objectiveEl: HTMLElement | null = null
   private idleHintEl: HTMLElement | null = null
+  private hudCarryValueEl: HTMLElement | null = null
 
   private readonly onSpawnModeKey = (e: KeyboardEvent): void => {
     if (e.code === 'Digit1') {
@@ -133,6 +167,7 @@ export class Game {
       playerRoot,
       stackAnchor,
       pickupGroup,
+      ghostGroup,
       depositRoot,
       depositZoneMesh,
       depositRingMesh,
@@ -142,9 +177,14 @@ export class Game {
     } = createScene()
 
     this.scene = scene
+    this.burstGroup = new Group()
+    this.burstGroup.name = 'ghostHitBurst'
+    this.burstGroup.renderOrder = 50
+    this.scene.add(this.burstGroup)
 
     const hudMoney = host.querySelector<HTMLElement>('#hud-money')
     const hudCarry = host.querySelector<HTMLElement>('#hud-carry')
+    this.hudCarryValueEl = host.querySelector<HTMLElement>('#hud-carry-value')
     const hudDepositToast = host.querySelector<HTMLElement>(
       '#hud-deposit-toast',
     )
@@ -203,12 +243,14 @@ export class Game {
       if (hudCarry) {
         hudCarry.textContent = `${this.stack.count} / ${this.stack.maxCapacity}`
       }
+      this.refreshCarryValueHud()
       this.refreshLettersHud()
       this.refreshChaseHud()
     })
     if (hudCarry) {
       hudCarry.textContent = `0 / ${INITIAL_STACK_CAPACITY}`
     }
+    this.refreshCarryValueHud()
 
     this.chaseWord = new ChaseWordSystem({
       getSpawnMode: () => this.spawnMode,
@@ -230,6 +272,8 @@ export class Game {
       createConsonantLetterItem: () => createConsonantLetterItem(),
     })
     this.resourceSources.syncLayoutForMode(this.spawnMode)
+    this.ghostSystem = new GhostSystem(ghostGroup)
+    this.powerPelletSpawner = new PowerPelletSpawner()
     this.refreshLettersHud()
     this.refreshChaseHud()
     this.refreshSpawnHud()
@@ -237,6 +281,9 @@ export class Game {
 
     this.seedBootstrapPickups()
 
+    this.hitFlashEl = host.querySelector('#hud-hit-flash')
+    this.powerTintEl = host.querySelector('#hud-power-tint')
+    this.powerTimerEl = host.querySelector('#hud-power-timer')
     this.bootstrapHintEl = host.querySelector('#hud-bootstrap')
     this.objectiveEl = host.querySelector('#hud-objective')
     this.idleHintEl = host.querySelector('#hud-idle-hint')
@@ -296,14 +343,31 @@ export class Game {
         if (ol.overloadActive) {
           this.depositFeedback.triggerOverloadBurst(ol.perfect)
         } else {
-          this.depositFeedback.trigger()
-        }
-        if (hudMoney) {
-          hudMoney.classList.remove('money-bump')
-          void hudMoney.offsetWidth
-          hudMoney.classList.add('money-bump')
+          this.depositFeedback.triggerDepositComplete(
+            items.length,
+            ev.credits + ol.overloadBonus,
+          )
         }
         const totalPayout = ev.credits + ol.overloadBonus
+        if (hudMoney) {
+          hudMoney.classList.remove('money-bump', 'money-bump-big')
+          void hudMoney.offsetWidth
+          const heavy =
+            !ol.overloadActive &&
+            (items.length >= 7 || totalPayout >= 65)
+          hudMoney.classList.add(heavy ? 'money-bump-big' : 'money-bump')
+        }
+        if (
+          !ol.overloadActive &&
+          items.length >= 6 &&
+          totalPayout >= 40
+        ) {
+          spawnFloatingHudText(
+            this.gameViewport,
+            `+$${totalPayout} BANKED!`,
+            'float-hud--bank-big',
+          )
+        }
         if (
           hudOverload &&
           hudOverloadAmount &&
@@ -388,21 +452,123 @@ export class Game {
 
       const j = this.joystick.getVector()
       this.player.update(dt, j)
-      this.player.getVelocity(this.velScratch)
-      this.playerCharacter.update(dt, {
-        timeSec: this.elapsedSec,
-        speed: this.player.getHorizontalSpeed(),
-        velX: this.velScratch.x,
-        itemsCarried: this.stack.count,
-        maxCarry: this.stack.maxCapacity,
-      })
-      this.cameraRig.update(dt)
-      this.moneyHud?.update(dt)
+      this.player.getPosition(this.playerPos)
+
+      this.powerModeRemaining = Math.max(0, this.powerModeRemaining - dt)
+
       this.itemWorld.updateVisuals(this.elapsedSec, dt)
+
+      this.player.setPowerSpeedMultiplier(
+        this.powerModeRemaining > 0 ? POWER_MODE_SPEED_MULTIPLIER : 1,
+      )
+      this.powerTintEl?.classList.toggle(
+        'hud-power-tint--on',
+        this.powerModeRemaining > 0,
+      )
+      if (this.powerTimerEl) {
+        const on = this.powerModeRemaining > 0
+        this.powerTimerEl.hidden = !on
+        if (on) {
+          this.powerTimerEl.textContent = `${Math.ceil(this.powerModeRemaining)}`
+        }
+      }
+
+      this.ghostSystem.setPowerMode(
+        this.powerModeRemaining > 0,
+        this.elapsedSec,
+      )
+      this.ghostSystem.update(dt, this.playerPos)
+
+      this.ghostHitInvuln = Math.max(0, this.ghostHitInvuln - dt)
+      if (!this.ghostDamageArmed) {
+        if (
+          this.ghostSystem.isPlayerClearForGhostDamageRearm(
+            this.playerPos,
+            this.player.radius,
+          )
+        ) {
+          this.ghostDamageArmed = true
+        }
+      }
+      this.gameViewport.classList.toggle(
+        'game-viewport--ghost-invuln',
+        this.ghostHitInvuln > 0,
+      )
+
+      if (this.ghostSystem.tryEatGhost(this.playerPos, this.player.radius)) {
+        this.economy.addMoney(GHOST_EAT_MONEY_REWARD)
+        spawnFloatingHudText(
+          this.gameViewport,
+          `+$${GHOST_EAT_MONEY_REWARD}`,
+          'float-hud--coin',
+        )
+        playJuiceSound('ghost_eat')
+      }
+      const hit = this.ghostSystem.tryHitPlayer(
+        this.playerPos,
+        this.player.radius,
+        this.ghostHitInvuln > 0 || !this.ghostDamageArmed,
+      )
+      if (hit.kind === 'hit') {
+        this.ghostDamageArmed = false
+        this.ghostHitInvuln = GHOST_HIT_INVULN_SEC
+        this.player.applyGhostKnockback(
+          hit.ghostX,
+          hit.ghostZ,
+          this.playerPos.x,
+          this.playerPos.z,
+        )
+        this.triggerGhostHitFlash()
+
+        const c = this.stack.count
+        let toRemove = 0
+        if (c > 0) {
+          const frac =
+            GHOST_HIT_LOSS_MIN +
+            Math.random() * (GHOST_HIT_LOSS_MAX - GHOST_HIT_LOSS_MIN)
+          toRemove = Math.min(c, Math.ceil(c * frac))
+        }
+        const lost =
+          toRemove > 0 ? this.stack.popManyFromTop(toRemove) : []
+        if (lost.length > 0) {
+          this.chaseWord.onLettersRemovedFromCarry(lost)
+        }
+
+        this.burstSpawnScratch.copy(this.playerPos)
+        this.burstSpawnScratch.y += 0.38
+        this.burstParticles.push(
+          ...spawnGhostHitPelletBurst(
+            this.burstGroup,
+            this.burstSpawnScratch,
+            lost,
+          ),
+        )
+        playJuiceSound('ghost_hit')
+        this.ghostSystem.onGhostHitLandedAt(
+          hit.ghostX,
+          hit.ghostZ,
+          this.playerPos,
+        )
+      }
+      updateGhostHitBursts(this.burstParticles, dt)
+
       const stackIdsBefore = new Set(
         this.stack.getSnapshot().map((i) => i.id),
       )
-      this.collection.update(this.player, this.stack, this.itemWorld, dt)
+      this.powerPelletSpawner.update(this.elapsedSec, this.itemWorld)
+      this.collection.update(this.player, this.stack, this.itemWorld, dt, {
+        pickupBlocked: this.ghostHitInvuln > 0,
+        onPowerPelletCollected: (item) => {
+          this.powerModeRemaining = POWER_MODE_DURATION_SEC
+          this.powerPelletSpawner.onPowerPelletCollected(item.id, this.elapsedSec)
+          playJuiceSound('power_pellet')
+          spawnFloatingHudText(
+            this.gameViewport,
+            'POWER!',
+            'float-hud--pickup',
+          )
+        },
+      })
       for (const it of this.stack.getSnapshot()) {
         if (!stackIdsBefore.has(it.id)) {
           this.chaseWord.onLetterCollected(it)
@@ -410,6 +576,19 @@ export class Game {
           playJuiceSound('pickup')
         }
       }
+
+      this.player.getVelocity(this.velScratch)
+      this.playerCharacter.update(dt, {
+        timeSec: this.elapsedSec,
+        speed: this.player.getHorizontalSpeed(),
+        velX: this.velScratch.x,
+        itemsCarried: this.stack.count,
+        maxCarry: this.stack.maxCapacity,
+        powerMode: this.powerModeRemaining > 0,
+        ghostInvuln: this.ghostHitInvuln > 0,
+      })
+      this.cameraRig.update(dt)
+      this.moneyHud?.update(dt)
       this.itemWorld.updateCollectEffects(dt)
       this.stackVisual.update(dt)
       this.depositController.update(dt)
@@ -436,6 +615,7 @@ export class Game {
     if (this.spawnMode === mode) return
     this.spawnMode = mode
     this.itemWorld.clearAllPickups()
+    this.powerPelletSpawner.reset(this.itemWorld, this.elapsedSec)
     this.resourceSources.onSpawnModeChanged()
     this.resourceSources.syncLayoutForMode(this.spawnMode)
     this.chaseWord.syncMode()
@@ -533,6 +713,19 @@ export class Game {
     }
   }
 
+  private refreshCarryValueHud(): void {
+    const el = this.hudCarryValueEl
+    if (!el) return
+    const snap = this.stack.getSnapshot()
+    if (snap.length === 0) {
+      el.textContent = '≈ $0'
+      el.hidden = true
+      return
+    }
+    el.hidden = false
+    el.textContent = `≈ $${previewCarryPayout(snap)}`
+  }
+
   private refreshLettersHud(): void {
     if (!this.hudLetters) return
     if (this.spawnMode !== 'letter') {
@@ -557,9 +750,14 @@ export class Game {
     overload?: DepositPresentationOverload,
   ): void {
     const total = ev.credits + (overload?.overloadBonus ?? 0)
+    const stackJackpot =
+      !overload?.overloadActive &&
+      ev.itemCount >= 2 &&
+      ev.batchMultiplier >= 1.18
     amountEl.classList.remove(
       'deposit-amount--overload',
       'deposit-amount--overload-perfect',
+      'deposit-amount--stack-jackpot',
     )
     if (overload?.overloadActive) {
       amountEl.textContent = total > 0 ? `+$${total}` : '$0'
@@ -567,7 +765,14 @@ export class Game {
       if (overload.perfect) amountEl.classList.add('deposit-amount--overload-perfect')
     } else {
       amountEl.textContent = ev.credits > 0 ? `+$${ev.credits}` : '$0'
+      if (stackJackpot) amountEl.classList.add('deposit-amount--stack-jackpot')
     }
+
+    const riskLine =
+      !overload?.overloadActive && ev.batchMultiplier > 1.02
+        ? `Stack bonus ×${ev.batchMultiplier.toFixed(2)} (base $${ev.baseCredits})`
+        : ''
+
     if (ev.letterWord.length === 0) {
       wordEl.textContent = ''
       wordEl.style.display = 'none'
@@ -576,6 +781,9 @@ export class Game {
         hintEl.textContent = overload.perfect
           ? 'Perfect overload — maximum burst'
           : 'Overload drop — bonus credits'
+      } else if (riskLine) {
+        hintEl.style.display = 'block'
+        hintEl.textContent = `${riskLine} — bigger stacks pay more`
       } else {
         hintEl.textContent = ''
         hintEl.style.display = 'none'
@@ -589,21 +797,42 @@ export class Game {
       hintEl.textContent = overload.perfect
         ? 'Perfect overload — maximum burst'
         : 'Overload drop — bonus credits'
-    } else if (ev.wordValid === true) {
-      hintEl.style.display = 'block'
-      hintEl.textContent = 'Valid word — bonus applied'
-    } else if (ev.wordValid === false) {
-      hintEl.style.display = 'block'
-      hintEl.textContent = 'Not a word — partial payout'
     } else {
-      hintEl.style.display = 'none'
-      hintEl.textContent = ''
+      const parts: string[] = []
+      if (riskLine) parts.push(riskLine)
+      if (ev.wordValid === true) {
+        parts.push('Valid word — bonus applied')
+      } else if (ev.wordValid === false) {
+        parts.push('Not a word — partial payout')
+      }
+      if (parts.length > 0) {
+        hintEl.style.display = 'block'
+        hintEl.textContent = parts.join(' · ')
+      } else {
+        hintEl.style.display = 'none'
+        hintEl.textContent = ''
+      }
     }
+  }
+
+  private triggerGhostHitFlash(): void {
+    const el = this.hitFlashEl
+    if (!el) return
+    if (this.hitFlashTimer) {
+      clearTimeout(this.hitFlashTimer)
+      this.hitFlashTimer = null
+    }
+    el.classList.add('hud-hit-flash--on')
+    this.hitFlashTimer = setTimeout(() => {
+      el.classList.remove('hud-hit-flash--on')
+      this.hitFlashTimer = null
+    }, 88)
   }
 
   private refreshSpawnHud(): void {
     if (!this.hudSpawn) return
-    const label = this.spawnMode === 'crystal' ? 'crystal' : 'letter'
+    const label =
+      this.spawnMode === 'crystal' ? 'pellets (hue)' : 'pellets (letters)'
     this.hudSpawn.textContent = `Mode: ${label} · sources · [1][2] · ?spawn=letter · [Z] zones · ?zones=1`
   }
 
@@ -613,7 +842,16 @@ export class Game {
     if (this.depositToastTimer) clearTimeout(this.depositToastTimer)
     if (this.chaseToastTimer) clearTimeout(this.chaseToastTimer)
     if (this.overloadHudTimer) clearTimeout(this.overloadHudTimer)
+    if (this.hitFlashTimer) {
+      clearTimeout(this.hitFlashTimer)
+      this.hitFlashTimer = null
+    }
+    this.hitFlashEl?.classList.remove('hud-hit-flash--on')
+    this.gameViewport.classList.remove('game-viewport--ghost-invuln')
+    disposeAllGhostHitBursts(this.burstParticles)
+    this.burstGroup.removeFromParent()
     this.resourceSources.dispose()
+    this.ghostSystem.dispose()
     this.joystick.dispose()
     this.unsubscribeResize()
     this.renderer.dispose()

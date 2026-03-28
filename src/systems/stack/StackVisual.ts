@@ -1,5 +1,9 @@
-import type { Object3D } from 'three'
-import type { Mesh } from 'three'
+import {
+  Mesh,
+  Sprite,
+  SpriteMaterial,
+  type Object3D,
+} from 'three'
 import { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createStackMesh } from '../items/ItemVisuals.ts'
@@ -13,7 +17,7 @@ const SPAWN_SCALE = 0.14
 
 /** Carried stack meshes on the anchor; data-driven, type-agnostic */
 export class StackVisual {
-  private meshes: Mesh[] = []
+  private meshes: Object3D[] = []
   private prevIds: string[] = []
   private readonly anchor: Object3D
 
@@ -89,7 +93,7 @@ export class StackVisual {
    * After `stack.popFromTop({ silent: true })`, detaches the top mesh for deposit flight.
    * Caller must `stack.notifyChange()` so HUD/sync see the new snapshot.
    */
-  extractTopMeshForDeposit(item: GameItem): Mesh {
+  extractTopMeshForDeposit(item: GameItem): Object3D {
     if (this.meshes.length === 0) {
       throw new Error('StackVisual.extractTopMeshForDeposit: empty stack')
     }
@@ -123,10 +127,20 @@ export class StackVisual {
   private clearMeshes(): void {
     for (const m of this.meshes) {
       this.anchor.remove(m)
-      m.geometry.dispose()
-      const mat = m.material
-      if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
-      else mat.dispose()
+      m.traverse((o) => {
+        if (o instanceof Sprite) {
+          const sm = o.material as SpriteMaterial
+          sm.map?.dispose()
+          sm.dispose()
+          return
+        }
+        if (o instanceof Mesh) {
+          o.geometry.dispose()
+          const mat = o.material
+          if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
+          else mat.dispose()
+        }
+      })
     }
     this.meshes = []
   }

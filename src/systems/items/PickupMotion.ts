@@ -1,4 +1,4 @@
-import type { Mesh } from 'three'
+import type { Object3D } from 'three'
 
 const PICKUP_ANIM_KEY = 'pickupIdle' as const
 
@@ -10,30 +10,51 @@ export type PickupIdleState = {
   spinRadPerSec: number
 }
 
-export type PickupMotionProfile = 'crystal' | 'letter'
+export type PickupMotionProfile =
+  | 'crystal'
+  | 'letter'
+  | 'pellet'
+  /** Letter on pellet sprite: keep spin at 0 so the glyph stays readable */
+  | 'letterPellet'
 
 /** Visual-only idle motion for world pickups (bob + slow spin). */
 export function attachPickupIdleMotion(
-  mesh: Mesh,
-  profile: PickupMotionProfile = 'crystal',
+  mesh: Object3D,
+  profile: PickupMotionProfile = 'pellet',
 ): void {
+  const isLetterPellet = profile === 'letterPellet'
+  const isPellet = profile === 'pellet'
   const isLetter = profile === 'letter'
   const st: PickupIdleState = {
     baseY: mesh.position.y,
     phase: Math.random() * Math.PI * 2,
-    bobAmp: isLetter
-      ? 0.012 + Math.random() * 0.008
-      : 0.038 + Math.random() * 0.035,
-    bobHz: isLetter ? 0.35 + Math.random() * 0.15 : 0.85 + Math.random() * 0.45,
-    spinRadPerSec: isLetter
-      ? 0.06 + Math.random() * 0.06
-      : 0.32 + Math.random() * 0.45,
+    bobAmp: isLetterPellet
+      ? 0.014 + Math.random() * 0.008
+      : isPellet
+        ? 0.018 + Math.random() * 0.012
+        : isLetter
+          ? 0.012 + Math.random() * 0.008
+          : 0.038 + Math.random() * 0.035,
+    bobHz: isLetterPellet
+      ? 0.38 + Math.random() * 0.14
+      : isPellet
+        ? 0.42 + Math.random() * 0.18
+        : isLetter
+          ? 0.35 + Math.random() * 0.15
+          : 0.85 + Math.random() * 0.45,
+    spinRadPerSec: isLetterPellet
+      ? 0
+      : isPellet
+        ? 0.12 + Math.random() * 0.1
+        : isLetter
+          ? 0.06 + Math.random() * 0.06
+          : 0.32 + Math.random() * 0.45,
   }
   mesh.userData[PICKUP_ANIM_KEY] = st
 }
 
 export function updatePickupIdleMotion(
-  mesh: Mesh,
+  mesh: Object3D,
   timeSec: number,
   dt: number,
 ): void {

@@ -1,4 +1,5 @@
 import { Vector3 } from 'three'
+import type { GameItem } from '../../core/types/GameItem.ts'
 import type { CarryStack } from '../stack/CarryStack.ts'
 import type { ItemWorld } from '../items/ItemWorld.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
@@ -10,6 +11,13 @@ import {
 
 const p = new Vector3()
 
+export type CollectionCallbacks = {
+  /** Power pellets are consumed instantly (not stacked). */
+  onPowerPelletCollected?: (item: Extract<GameItem, { type: 'powerPellet' }>) => void
+  /** When true (e.g. ghost hit i-frames), magnet + pickup are skipped. */
+  pickupBlocked?: boolean
+}
+
 export class CollectionSystem {
   readonly pickupRadius = PICKUP_EXTRA_RADIUS
 
@@ -18,7 +26,10 @@ export class CollectionSystem {
     stack: CarryStack,
     itemWorld: ItemWorld,
     dt: number,
+    callbacks?: CollectionCallbacks,
   ): void {
+    if (callbacks?.pickupBlocked) return
+
     player.getPosition(p)
     itemWorld.applyMagnetPull(
       p,
@@ -34,10 +45,16 @@ export class CollectionSystem {
     for (const [id, { mesh, item }] of itemWorld.entries()) {
       const dx = p.x - mesh.position.x
       const dz = p.z - mesh.position.z
-      if (dx * dx + dz * dz <= r2) {
-        if (stack.push(item)) {
-          itemWorld.detachPickupForCollect(id)
-        }
+      if (dx * dx + dz * dz > r2) continue
+
+      if (item.type === 'powerPellet') {
+        callbacks?.onPowerPelletCollected?.(item)
+        itemWorld.detachPickupForCollect(id)
+        continue
+      }
+
+      if (stack.push(item)) {
+        itemWorld.detachPickupForCollect(id)
       }
     }
   }

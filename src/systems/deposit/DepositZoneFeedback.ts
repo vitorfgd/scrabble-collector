@@ -14,7 +14,9 @@ const BASE_RING_EMISSIVE = 0.12
 
 export class DepositZoneFeedback {
   private flashT = 0
+  private flashTDur = FLASH_SEC
   private burstT = 0
+  private burstTDur = BURST_SEC
   private readonly zonePlane: Mesh
   private readonly zoneRing: Mesh | null
   private readonly baseScale: number
@@ -45,17 +47,37 @@ export class DepositZoneFeedback {
 
   triggerItem(): void {
     this.burstRingStrong = false
-    this.flashT = FLASH_SEC * 0.85
+    this.flashTDur = FLASH_SEC * 0.85
+    this.flashT = this.flashTDur
   }
 
   trigger(): void {
     this.burstRingStrong = false
+    this.flashTDur = FLASH_SEC
     this.flashT = FLASH_SEC
+    this.burstTDur = BURST_SEC
     this.burstT = BURST_SEC
   }
 
+  /**
+   * Normal deposit complete — scales flash / zone pulse with stack size and payout.
+   */
+  triggerDepositComplete(itemCount: number, payoutCredits: number): void {
+    this.burstRingStrong = false
+    const sizeS = Math.min(1, itemCount / 11)
+    const valueS = Math.min(1, payoutCredits / 95)
+    const punch = 0.28 + sizeS * 0.55 + valueS * 0.45
+    this.flashTDur = FLASH_SEC * (0.82 + punch * 0.55)
+    this.flashT = this.flashTDur
+    this.burstTDur = BURST_SEC * (0.88 + punch * 0.62)
+    this.burstT = this.burstTDur
+    const planeMat = this.zonePlane.material as MeshStandardMaterial
+    planeMat.emissiveIntensity = BASE_PLANE_EMISSIVE + 0.06 + punch * 0.2
+  }
+
   triggerOverloadItemImpact(perfect: boolean): void {
-    this.flashT = FLASH_SEC * (perfect ? 1.1 : 0.95)
+    this.flashTDur = FLASH_SEC * (perfect ? 1.1 : 0.95)
+    this.flashT = this.flashTDur
     const planeMat = this.zonePlane.material as MeshStandardMaterial
     planeMat.emissiveIntensity =
       BASE_PLANE_EMISSIVE + (perfect ? 0.35 : 0.2)
@@ -63,8 +85,10 @@ export class DepositZoneFeedback {
 
   triggerOverloadBurst(perfect: boolean): void {
     this.burstRingStrong = perfect
-    this.flashT = FLASH_SEC * 1.15
-    this.burstT = BURST_SEC * (perfect ? 1.35 : 1)
+    this.flashTDur = FLASH_SEC * 1.15
+    this.flashT = this.flashTDur
+    this.burstTDur = BURST_SEC * (perfect ? 1.35 : 1)
+    this.burstT = this.burstTDur
     this.burstRingMaxLife = perfect ? 0.48 : 0.36
     this.burstRingLife = this.burstRingMaxLife
     this.burstRing.visible = true
@@ -92,8 +116,9 @@ export class DepositZoneFeedback {
 
     if (this.burstT > 0) {
       this.burstT -= dt
-      const p = Math.max(0, this.burstT / BURST_SEC)
-      const amp = this.burstRingStrong ? 0.1 : 0.07
+      const ref = this.burstTDur || BURST_SEC
+      const p = Math.max(0, this.burstT / ref)
+      const amp = this.burstRingStrong ? 0.1 : 0.07 + (1 - p) * 0.06
       const pulse = 1 + amp * Math.sin((1 - p) * Math.PI)
       this.zonePlane.scale.setScalar(this.baseScale * pulse)
       if (this.burstT <= 0) {
@@ -112,7 +137,8 @@ export class DepositZoneFeedback {
 
     this.flashT -= dt
     const t = Math.max(0, this.flashT)
-    const p = t / FLASH_SEC
+    const fd = this.flashTDur || FLASH_SEC
+    const p = t / fd
     const strength = p * p
 
     planeMat.emissiveIntensity = BASE_PLANE_EMISSIVE + 0.85 * strength

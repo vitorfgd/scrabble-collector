@@ -1,12 +1,10 @@
 import {
   CanvasTexture,
   Color,
-  DodecahedronGeometry,
   Group,
-  IcosahedronGeometry,
   Mesh,
   MeshStandardMaterial,
-  OctahedronGeometry,
+  SphereGeometry,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
@@ -94,7 +92,7 @@ export type CrystalFormationHandle = {
 }
 
 /**
- * Large multi-shard crystal cluster sitting inside the spawn disk (gem/crystal mode).
+ * Static pellet pile at zone center (shown in crystal spawn mode; matches arcade pickup look).
  */
 export function createCrystalFormation(cfg: SourceNodeConfig): CrystalFormationHandle {
   const root = new Group()
@@ -102,103 +100,47 @@ export function createCrystalFormation(cfg: SourceNodeConfig): CrystalFormationH
   root.position.set(cfg.worldX, 0, cfg.worldZ)
 
   const hue = cfg.letterKind === 'vowel' ? 0.12 : 0.52
-  const base = new Color().setHSL(hue, 0.55, 0.42)
-  const em = new Color().setHSL(hue + 0.04, 0.7, 0.55)
+  const core = new Color().setHSL(hue, 0.72, 0.52)
+  const em = new Color().setHSL(hue + 0.02, 0.5, 0.64)
 
-  const shards: { mesh: Mesh; baseEm: number; phase: number }[] = []
+  const pellets: { mesh: Mesh; baseEm: number; phase: number }[] = []
 
-  const addShard = (
-    geom: DodecahedronGeometry | IcosahedronGeometry | OctahedronGeometry,
-    sx: number,
-    sy: number,
-    sz: number,
+  const addPellet = (
     px: number,
     py: number,
     pz: number,
-    rx: number,
-    ry: number,
-    rz: number,
+    radius: number,
     phase: number,
   ): void => {
     const mat = new MeshStandardMaterial({
-      color: base.clone(),
+      color: core.clone(),
       emissive: em.clone(),
-      emissiveIntensity: 0.35,
-      roughness: 0.35,
-      metalness: 0.25,
-      transparent: true,
-      opacity: 0.96,
+      emissiveIntensity: 0.42,
+      roughness: 0.22,
+      metalness: 0.06,
     })
-    const mesh = new Mesh(geom, mat)
-    mesh.scale.set(sx, sy, sz)
+    const mesh = new Mesh(new SphereGeometry(radius, 14, 12), mat)
     mesh.position.set(px, py, pz)
-    mesh.rotation.set(rx, ry, rz)
     mesh.castShadow = true
     mesh.receiveShadow = true
     root.add(mesh)
-    shards.push({ mesh, baseEm: 0.35, phase })
+    pellets.push({ mesh, baseEm: 0.42, phase })
   }
 
-  addShard(
-    new DodecahedronGeometry(1, 0),
-    1.85,
-    2.1,
-    1.75,
-    0,
-    1.05,
-    0,
-    0.12,
-    0.35,
-    -0.08,
-    0,
-  )
-  addShard(
-    new OctahedronGeometry(1, 0),
-    1.25,
-    1.65,
-    1.2,
-    0.95,
-    0.72,
-    -0.35,
-    0.25,
-    -0.4,
-    0.15,
-    1.1,
-  )
-  addShard(
-    new IcosahedronGeometry(1, 0),
-    0.95,
-    1.15,
-    0.9,
-    -0.85,
-    0.55,
-    0.55,
-    -0.2,
-    0.55,
-    0.1,
-    2.3,
-  )
-  addShard(
-    new DodecahedronGeometry(1, 0),
-    0.65,
-    0.85,
-    0.7,
-    0.45,
-    0.28,
-    0.75,
-    0.5,
-    2.1,
-    -0.4,
-    4.1,
-  )
+  addPellet(0, 0.13, 0, 0.16, 0)
+  addPellet(0.22, 0.11, 0.08, 0.13, 0.7)
+  addPellet(-0.18, 0.1, 0.12, 0.12, 1.2)
+  addPellet(0.12, 0.09, -0.2, 0.11, 1.9)
+  addPellet(-0.1, 0.08, -0.14, 0.1, 2.4)
+  addPellet(0.28, 0.07, -0.06, 0.09, 3.1)
+  addPellet(-0.26, 0.06, 0.04, 0.09, 3.8)
 
   return {
     root,
     update: (timeSec: number) => {
-      for (const s of shards) {
+      for (const s of pellets) {
         const mat = s.mesh.material as MeshStandardMaterial
-        const pulse =
-          0.22 + 0.18 * Math.sin(timeSec * 2.4 + s.phase)
+        const pulse = 0.18 + 0.14 * Math.sin(timeSec * 2.4 + s.phase)
         mat.emissiveIntensity = s.baseEm + pulse
       }
     },
