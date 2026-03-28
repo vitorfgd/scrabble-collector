@@ -10,7 +10,7 @@ export class PlayerController {
   /** Horizontal radius for overlap tests (XZ) */
   readonly radius = 0.55
   private readonly playerRoot: Group
-  private readonly maxSpeed: number
+  private maxSpeed: number
   private readonly drag: number
   private targetYaw = 0
   private currentYaw = 0
@@ -30,6 +30,14 @@ export class PlayerController {
     return this.playerRoot
   }
 
+  setMaxSpeed(speed: number): void {
+    this.maxSpeed = Math.max(2.5, speed)
+  }
+
+  getMaxSpeed(): number {
+    return this.maxSpeed
+  }
+
   getPosition(out: Vector3): Vector3 {
     return out.copy(this.playerRoot.position)
   }
@@ -44,29 +52,32 @@ export class PlayerController {
    * Joystick y is screen-down; world forward on XZ is -Z for this camera setup.
    */
   update(dt: number, input: JoystickVector): void {
-    const ax = input.x
-    // Screen Y is down-positive; map so stick-up moves forward on world -Z
-    const az = input.y
-    const mag = Math.hypot(ax, az)
-    const nx = mag > 1e-6 ? ax / mag : 0
-    const nz = mag > 1e-6 ? az / mag : 0
+    if (!input.fingerDown) {
+      this.velocity.x = 0
+      this.velocity.z = 0
+    } else {
+      const ax = input.x
+      const az = input.y
+      const mag = Math.hypot(ax, az)
+      const nx = mag > 1e-6 ? ax / mag : 0
+      const nz = mag > 1e-6 ? az / mag : 0
 
-    const targetVx = nx * this.maxSpeed
-    const targetVz = nz * this.maxSpeed
+      const targetVx = nx * this.maxSpeed
+      const targetVz = nz * this.maxSpeed
 
-    const k = 1 - Math.exp(-this.drag * dt)
-    this.velocity.x += (targetVx - this.velocity.x) * k
-    this.velocity.z += (targetVz - this.velocity.z) * k
-
-    if (!input.active) {
-      this.velocity.multiplyScalar(Math.exp(-this.drag * 0.35 * dt))
+      const k = 1 - Math.exp(-this.drag * dt)
+      this.velocity.x += (targetVx - this.velocity.x) * k
+      this.velocity.z += (targetVz - this.velocity.z) * k
     }
 
     this.playerRoot.position.x += this.velocity.x * dt
     this.playerRoot.position.z += this.velocity.z * dt
 
+    const ax = input.x
+    const az = input.y
+    const mag = input.fingerDown ? Math.hypot(ax, az) : 0
     const hs = Math.hypot(this.velocity.x, this.velocity.z)
-    if (mag > 0.08 || hs > 0.4) {
+    if (input.fingerDown && (mag > 0.08 || hs > 0.4)) {
       this.targetYaw = Math.atan2(-this.velocity.x, -this.velocity.z)
     }
 

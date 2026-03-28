@@ -44,20 +44,102 @@ body {
   height: 100%;
 }
 
-#hud-row {
+/* Chase Word target (letter mode) — separate from held letters below */
+.hud-chase {
   position: absolute;
-  top: 12px;
-  left: 14px;
-  right: 14px;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(96%, 340px);
+  padding: 6px 12px 8px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(20, 24, 40, 0.72),
+    rgba(12, 14, 22, 0.55)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  text-align: center;
+}
+
+.hud-chase.hidden {
+  display: none;
+}
+
+.hud-chase-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hud-chase-tag {
+  font: 700 11px system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: rgba(255, 220, 160, 0.95);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.hud-chase-target {
+  font: 900 clamp(20px, 6vw, 30px) system-ui, sans-serif;
+  letter-spacing: 0.22em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+}
+
+.hud-chase-progress {
+  margin-top: 4px;
+  font: 700 clamp(13px, 3.8vw, 17px) ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  color: rgba(180, 255, 220, 0.92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Bottom bar: held letters (center) + carry/money + mode hint — clear of chase UI at top */
+.hud-bottom {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   z-index: 3;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 24px);
+  max-width: 100%;
+  pointer-events: none;
+}
+
+#hud-letters {
+  position: relative;
+  width: 100%;
+  max-width: 96%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font: 800 clamp(18px, 5.5vw, 28px) system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: #fff;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+  min-height: 1.2em;
+}
+
+#hud-row {
+  position: relative;
+  width: 100%;
+  display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   font: 700 16px system-ui, sans-serif;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
-  pointer-events: none;
 }
 
 #hud-carry {
@@ -73,18 +155,65 @@ body {
   background: rgba(0, 0, 0, 0.25);
 }
 
+.hud-spawn {
+  position: relative;
+  width: 100%;
+  text-align: center;
+  font: 600 11px system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  line-height: 1.35;
+}
+
 #hud-deposit-toast {
   position: absolute;
-  bottom: 22%;
+  bottom: 20%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
-  font: 800 20px system-ui, sans-serif;
-  color: #ffe566;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: min(92%, 320px);
+  text-align: center;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s ease-out;
+}
+
+#hud-deposit-toast .deposit-amount {
+  font: 800 clamp(18px, 5.5vw, 26px) system-ui, sans-serif;
+  color: #ffe566;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+#hud-deposit-toast .deposit-word {
+  font: 800 clamp(16px, 4.5vw, 24px) system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+}
+
+#hud-deposit-toast .deposit-hint {
+  font: 600 12px system-ui, sans-serif;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.fly-coin {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff7c2, #e8a820 55%, #5a3d08);
+  box-shadow: 0 0 8px rgba(255, 200, 80, 0.55);
+  pointer-events: none;
+  z-index: 5;
+  transition: transform 0.44s cubic-bezier(0.2, 0.9, 0.25, 1),
+    opacity 0.44s ease-out;
 }
 
 #hud-deposit-toast.visible {
@@ -93,6 +222,77 @@ body {
 
 #hud-deposit-toast.hidden {
   visibility: hidden;
+}
+
+.chase-toast {
+  position: absolute;
+  top: 28%;
+  left: 50%;
+  transform: translateX(-50%) scale(0.92);
+  z-index: 5;
+  min-width: min(88%, 280px);
+  padding: 14px 18px 16px;
+  border-radius: 14px;
+  text-align: center;
+  pointer-events: none;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 200, 80, 0.95),
+    rgba(200, 90, 40, 0.92)
+  );
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(255, 220, 120, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease-out, transform 0.2s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.chase-toast.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+  animation: chaseToastPop 0.55s ease-out;
+}
+
+.chase-toast.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.chase-toast-title {
+  font: 800 13px system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  color: rgba(20, 12, 8, 0.9);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.chase-toast-word {
+  margin-top: 6px;
+  font: 900 clamp(22px, 7vw, 34px) system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  color: #1a0a06;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.chase-toast-bonus {
+  margin-top: 4px;
+  font: 800 clamp(16px, 4.5vw, 22px) system-ui, sans-serif;
+  color: #0a1f0a;
+}
+
+@keyframes chaseToastPop {
+  0% {
+    transform: translateX(-50%) scale(0.75);
+    filter: brightness(1.3);
+  }
+  55% {
+    transform: translateX(-50%) scale(1.04);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    filter: brightness(1);
+  }
 }
 
 #hud-money.money-bump {

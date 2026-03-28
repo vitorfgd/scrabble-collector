@@ -1,10 +1,11 @@
 import type { Object3D } from 'three'
 import type { Mesh } from 'three'
+import { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createStackMesh } from '../items/ItemVisuals.ts'
 
-const STEP_Y = 0.34
-const SPAWN_SCALE = 0.04
+const STEP_Y = 0.44
+const SPAWN_SCALE = 0.14
 
 /** Carried stack meshes on the anchor; data-driven, type-agnostic */
 export class StackVisual {
@@ -18,6 +19,13 @@ export class StackVisual {
 
   sync(items: readonly GameItem[]): void {
     const ids = items.map((x) => x.id)
+
+    if (
+      ids.length === this.prevIds.length &&
+      ids.every((id, i) => id === this.prevIds[i])
+    ) {
+      return
+    }
 
     if (ids.length === 0) {
       this.clearMeshes()
@@ -33,6 +41,7 @@ export class StackVisual {
     if (samePrefix && ids.length === this.prevIds.length + 1) {
       const item = items[items.length - 1]
       const mesh = createStackMesh(item)
+      mesh.userData.stackItemId = item.id
       const i = items.length - 1
       mesh.position.y = i * STEP_Y
       mesh.position.x = 0
@@ -52,7 +61,7 @@ export class StackVisual {
   /** Smooth scale-in for new items and Y settle after layout changes */
   update(dt: number): void {
     const kScale = 1 - Math.exp(-16 * dt)
-    const kY = 1 - Math.exp(-14 * dt)
+    const kY = 1 - Math.exp(-12 * dt)
     this.meshes.forEach((mesh, i) => {
       const targetY = i * STEP_Y
       mesh.position.y += (targetY - mesh.position.y) * kY
@@ -64,10 +73,34 @@ export class StackVisual {
     })
   }
 
+  /**
+   * After `stack.popFromTop({ silent: true })`, detaches the top mesh for deposit flight.
+   * Caller must `stack.notifyChange()` so HUD/sync see the new snapshot.
+   */
+  extractTopMeshForDeposit(item: GameItem): Mesh {
+    if (this.meshes.length === 0) {
+      throw new Error('StackVisual.extractTopMeshForDeposit: empty stack')
+    }
+    const lastId = this.prevIds[this.prevIds.length - 1]
+    if (lastId !== item.id) {
+      throw new Error('StackVisual.extractTopMeshForDeposit: item/stack mismatch')
+    }
+    const mesh = this.meshes.pop()!
+    this.prevIds.pop()
+    this.anchor.updateMatrixWorld(true)
+    mesh.updateMatrixWorld(true)
+    const w = new Vector3()
+    mesh.getWorldPosition(w)
+    mesh.userData.depositWorldStart = w.clone()
+    this.anchor.remove(mesh)
+    return mesh
+  }
+
   private fullRebuild(items: readonly GameItem[]): void {
     this.clearMeshes()
     items.forEach((item, i) => {
       const mesh = createStackMesh(item)
+      mesh.userData.stackItemId = item.id
       mesh.position.y = i * STEP_Y
       mesh.scale.setScalar(1)
       this.anchor.add(mesh)

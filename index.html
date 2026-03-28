@@ -13,11 +13,31 @@
   <body>
     <div id="app">
       <div id="game-viewport" aria-label="Game view">
-        <div id="hud-row" aria-live="polite">
-          <span id="hud-carry">0 / 10</span>
-          <span id="hud-money">$0</span>
+        <div id="hud-chase" class="hud-chase hidden" aria-live="polite">
+          <div class="hud-chase-row">
+            <span class="hud-chase-tag">TARGET</span>
+            <span id="hud-chase-target" class="hud-chase-target"></span>
+          </div>
+          <div id="hud-chase-progress" class="hud-chase-progress"></div>
         </div>
-        <div id="hud-deposit-toast" class="deposit-toast hidden" aria-live="polite"></div>
+        <div id="hud-chase-toast" class="chase-toast hidden" aria-live="polite">
+          <div class="chase-toast-title">CHASE COMPLETE!</div>
+          <div class="chase-toast-word"></div>
+          <div class="chase-toast-bonus"></div>
+        </div>
+        <div id="hud-bottom" class="hud-bottom" aria-live="polite">
+          <div id="hud-letters" hidden></div>
+          <div id="hud-row">
+            <span id="hud-carry">0 / 10</span>
+            <span id="hud-money">$0</span>
+          </div>
+          <div id="hud-spawn" class="hud-spawn"></div>
+        </div>
+        <div id="hud-deposit-toast" class="deposit-toast hidden" aria-live="polite">
+          <div class="deposit-amount"></div>
+          <div class="deposit-word"></div>
+          <div class="deposit-hint"></div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

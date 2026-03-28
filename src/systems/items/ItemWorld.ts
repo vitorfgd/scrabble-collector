@@ -30,8 +30,12 @@ export class ItemWorld {
   spawn(item: GameItem, x: number, z: number): void {
     if (this.byId.has(item.id)) return
     const mesh = createPickupMesh(item)
-    mesh.position.set(x, 0, z)
-    attachPickupIdleMotion(mesh)
+    const y = mesh.position.y
+    mesh.position.set(x, y, z)
+    attachPickupIdleMotion(
+      mesh,
+      item.type === 'letter' ? 'letter' : 'crystal',
+    )
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
   }
@@ -42,6 +46,13 @@ export class ItemWorld {
     this.pickupGroup.remove(e.mesh)
     this.disposeMesh(e.mesh)
     this.byId.delete(id)
+  }
+
+  /** Clear all world pickups (e.g. when switching spawn mode) */
+  clearAllPickups(): void {
+    for (const id of [...this.byId.keys()]) {
+      this.remove(id)
+    }
   }
 
   /**
@@ -75,6 +86,11 @@ export class ItemWorld {
         this.collectAnims.splice(i, 1)
       }
     }
+  }
+
+  /** Current number of pickups in the world (for spawn throttling) */
+  getPickupCount(): number {
+    return this.byId.size
   }
 
   entries(): IterableIterator<[string, Entry]> {

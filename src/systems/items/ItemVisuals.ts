@@ -7,7 +7,7 @@ import {
 import {
   createLetterPickupMesh,
   createLetterStackMesh,
-} from '../../themes/letterTile/placeholderMeshes.ts'
+} from '../../themes/letterTile/letterTileMeshes.ts'
 
 /** Theme-facing mesh creation; branches on `type` for visuals only */
 export function createPickupMesh(item: GameItem): Mesh {

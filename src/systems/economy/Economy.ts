@@ -23,8 +23,22 @@ export class Economy {
   payout(items: GameItem[]): number {
     if (items.length === 0) return 0
     const add = this.resolveValue(items)
-    this.money += add
-    this.onMoneyChanged?.(this.money)
+    this.addMoney(add)
     return add
+  }
+
+  /** Direct credit grant (e.g. after explicit word evaluation) */
+  addMoney(amount: number): void {
+    if (amount <= 0) return
+    this.money += amount
+    this.onMoneyChanged?.(this.money)
+  }
+
+  /** Deducts if balance allows; returns whether spend succeeded */
+  trySpend(amount: number): boolean {
+    if (amount <= 0 || this.money < amount) return false
+    this.money -= amount
+    this.onMoneyChanged?.(this.money)
+    return true
   }
 }

@@ -2,7 +2,7 @@ import type { Mesh } from 'three'
 import { MeshStandardMaterial } from 'three'
 
 const FLASH_SEC = 0.32
-const BASE_PLANE_EMISSIVE = 0.25
+const BASE_PLANE_EMISSIVE = 0.22
 const BASE_RING_EMISSIVE = 0.12
 
 /** Short emissive pulse on ground deposit visuals (not tied to item type) */

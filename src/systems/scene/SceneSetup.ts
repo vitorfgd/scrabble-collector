@@ -1,12 +1,11 @@
 import {
+  CircleGeometry,
   Color,
-  DoubleSide,
   Group,
   Mesh,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
-  RingGeometry,
   Scene,
   HemisphereLight,
   DirectionalLight,
@@ -14,10 +13,15 @@ import {
 import type { Mesh as MeshType } from 'three'
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
 import { PlayerCharacterVisual } from '../player/PlayerCharacterVisual.ts'
+import { createLetterZoneBoundaryDebug } from '../letterZones/letterZoneDebug.ts'
+import { createTerrainDressing } from './terrainDressing.ts'
+import { createUpgradePad } from '../upgrades/UpgradePadVisual.ts'
+import type { PadLabelPayload } from '../upgrades/UpgradePadVisual.ts'
 
 export type SceneContents = {
   scene: Scene
-  ground: MeshType
+  /** Two tinted halves: vowels (left), consonants (right) */
+  ground: Group
   /** Root for movement + rotation; character is a child */
   playerRoot: Group
   /** Stack anchor lives on the procedural character (back) */
@@ -27,10 +31,19 @@ export type SceneContents = {
   /** Deposit zone root (visual + logical center) */
   depositRoot: Group
   depositZoneMesh: MeshType
-  /** Gold ring outlining the deposit circle */
-  depositRingMesh: MeshType
+  /** Optional rim (unused — single disc deposit for one clear zone read) */
+  depositRingMesh: MeshType | null
   /** Procedural character (animation + stack anchor) */
   playerCharacter: PlayerCharacterVisual
+  /** Dedicated upgrade plaza (pads + subtle floor) — kept outside resource spawn disks */
+  upgradeAreaRoot: Group
+  /** World upgrade pads (capacity + speed) */
+  upgradePads: {
+    capacity: { root: Group; setLabel: (p: PadLabelPayload) => void }
+    speed: { root: Group; setLabel: (p: PadLabelPayload) => void }
+  }
+  /** Toggle visibility for optional letter-zone boundary debug */
+  letterZoneDebugRoot: Group
 }
 
 export function createScene(): SceneContents {
@@ -51,69 +64,131 @@ export function createScene(): SceneContents {
   sun.shadow.camera.bottom = -20
   scene.add(sun)
 
-  const ground = new Mesh(
-    new PlaneGeometry(40, 40),
+  const ground = new Group()
+  ground.name = 'ground'
+  const halfW = 20
+  const halfD = 40
+  const vowelGround = new Mesh(
+    new PlaneGeometry(halfW, halfD),
     new MeshStandardMaterial({
-      color: 0x3d8c6a,
-      roughness: 0.95,
+      color: 0xc9a66b,
+      emissive: 0x6b4420,
+      emissiveIntensity: 0.1,
+      roughness: 0.94,
       metalness: 0,
     }),
   )
-  ground.rotation.x = -Math.PI / 2
-  ground.receiveShadow = true
+  vowelGround.rotation.x = -Math.PI / 2
+  vowelGround.position.set(-halfW * 0.5, 0, 0)
+  vowelGround.receiveShadow = true
+  ground.add(vowelGround)
+
+  const consonantGround = new Mesh(
+    new PlaneGeometry(halfW, halfD),
+    new MeshStandardMaterial({
+      color: 0x2f6f5c,
+      emissive: 0x0d3d32,
+      emissiveIntensity: 0.12,
+      roughness: 0.94,
+      metalness: 0,
+    }),
+  )
+  consonantGround.rotation.x = -Math.PI / 2
+  consonantGround.position.set(halfW * 0.5, 0, 0)
+  consonantGround.receiveShadow = true
+  ground.add(consonantGround)
+
+  const seam = new Mesh(
+    new PlaneGeometry(0.35, halfD),
+    new MeshStandardMaterial({
+      color: 0xfff8e8,
+      emissive: 0xffe8c8,
+      emissiveIntensity: 0.45,
+      roughness: 0.55,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.88,
+    }),
+  )
+  seam.rotation.x = -Math.PI / 2
+  seam.position.set(0, 0.024, 0)
+  seam.receiveShadow = true
+  ground.add(seam)
+
   scene.add(ground)
+
+  scene.add(createTerrainDressing())
+
+  const letterZoneDebugRoot = createLetterZoneBoundaryDebug()
+  scene.add(letterZoneDebugRoot)
 
   const playerRoot = new Group()
   const character = new PlayerCharacterVisual()
   playerRoot.add(character.root)
 
-  playerRoot.position.set(0, 0, 0)
+  /** Off-center so spawn is not inside the deposit circle at map center */
+  playerRoot.position.set(0, 0, 4.25)
   scene.add(playerRoot)
 
   const pickupGroup = new Group()
   scene.add(pickupGroup)
 
   const depositRoot = new Group()
-  depositRoot.position.set(7, 0, 0)
+  depositRoot.position.set(0, 0, 0)
   scene.add(depositRoot)
 
+  const depR = DEFAULT_DEPOSIT_ZONE_RADIUS
   const depositZoneMesh = new Mesh(
-    new PlaneGeometry(4, 4),
+    new CircleGeometry(depR, 56),
     new MeshStandardMaterial({
-      color: 0xf4d35e,
-      emissive: 0xaa8800,
-      emissiveIntensity: 0.25,
-      roughness: 0.8,
-      metalness: 0,
+      color: 0xf0c84a,
+      emissive: 0x9a6a08,
+      emissiveIntensity: 0.22,
+      roughness: 0.78,
+      metalness: 0.06,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.92,
     }),
   )
+  depositZoneMesh.name = 'depositZone'
   depositZoneMesh.rotation.x = -Math.PI / 2
-  depositZoneMesh.position.y = 0.02
+  depositZoneMesh.position.y = 0.022
   depositZoneMesh.receiveShadow = true
   depositRoot.add(depositZoneMesh)
 
-  const ringOuter = DEFAULT_DEPOSIT_ZONE_RADIUS + 0.12
-  const ringInner = Math.max(0.1, DEFAULT_DEPOSIT_ZONE_RADIUS - 0.35)
-  const depositRingMesh = new Mesh(
-    new RingGeometry(ringInner, ringOuter, 48),
+  const depositRingMesh: MeshType | null = null
+
+  /** South edge: clear of sources and central deposit (0,0) */
+  const upgradePlazaZ = -17
+  const upgradeAreaRoot = new Group()
+  upgradeAreaRoot.name = 'upgradeArea'
+
+  const plazaFloor = new Mesh(
+    new PlaneGeometry(9.5, 4.2),
     new MeshStandardMaterial({
-      color: 0xf5d35c,
-      emissive: 0xcc8800,
-      emissiveIntensity: 0.12,
-      roughness: 0.65,
-      metalness: 0.15,
+      color: 0x252036,
+      emissive: 0x151028,
+      emissiveIntensity: 0.08,
+      roughness: 0.94,
+      metalness: 0.04,
       transparent: true,
       opacity: 0.92,
-      side: DoubleSide,
     }),
   )
-  depositRingMesh.name = 'depositRing'
-  depositRingMesh.rotation.x = -Math.PI / 2
-  depositRingMesh.position.y = 0.028
-  depositRingMesh.receiveShadow = true
-  depositRoot.add(depositRingMesh)
+  plazaFloor.rotation.x = -Math.PI / 2
+  plazaFloor.position.set(0, 0.012, upgradePlazaZ)
+  plazaFloor.receiveShadow = true
+  upgradeAreaRoot.add(plazaFloor)
+
+  const capacityPad = createUpgradePad('CAPACITY', 0x6d28d9, 0xc4b5fd)
+  capacityPad.root.position.set(-2.35, 0, upgradePlazaZ)
+  upgradeAreaRoot.add(capacityPad.root)
+
+  const speedPad = createUpgradePad('SPEED', 0x0891b2, 0x67e8f9)
+  speedPad.root.position.set(2.35, 0, upgradePlazaZ)
+  upgradeAreaRoot.add(speedPad.root)
+
+  scene.add(upgradeAreaRoot)
 
   return {
     scene,
@@ -125,5 +200,11 @@ export function createScene(): SceneContents {
     depositZoneMesh,
     depositRingMesh,
     playerCharacter: character,
+    upgradeAreaRoot,
+    upgradePads: {
+      capacity: capacityPad,
+      speed: speedPad,
+    },
+    letterZoneDebugRoot,
   }
 }

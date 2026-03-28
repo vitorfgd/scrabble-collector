@@ -1,6 +1,6 @@
 /**
  * Generic collectible payload. Core systems only rely on id / type / value;
- * theme-specific fields (hue, char, ?) are for visuals or future rules.
+ * theme-specific fields (hue, letter, …) are for visuals or future rules.
  */
 export type ItemCore = {
   id: string
@@ -18,5 +18,6 @@ export type GameItem =
   | (ItemCore & {
       kind: 'collectible'
       type: 'letter'
-      char: string
+      /** Single A–Z character for tile display and future word rules */
+      letter: string
     })

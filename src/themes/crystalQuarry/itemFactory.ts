@@ -38,7 +38,7 @@ export function createCrystalStackMesh(
   item: Extract<GameItem, { type: 'crystal' }>,
 ): Mesh {
   const mesh = new Mesh(
-    new OctahedronGeometry(0.2, 0),
+    new OctahedronGeometry(0.3, 0),
     new MeshStandardMaterial({
       color: new Color().setHSL(item.hue, 0.65, 0.48),
       roughness: 0.45,
