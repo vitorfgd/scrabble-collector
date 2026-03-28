@@ -29,6 +29,23 @@ export function multisetCovers(
 }
 
 /**
+ * Add this deposit's letter counts toward `cumulative`, capped per letter by `need`
+ * (only letters in the chase word count).
+ */
+export function mergeDepositIntoCumulative(
+  need: Map<string, number>,
+  cumulative: Map<string, number>,
+  depositPool: Map<string, number>,
+): void {
+  for (const [ch, cap] of need) {
+    const add = depositPool.get(ch) ?? 0
+    if (add === 0) continue
+    const cur = cumulative.get(ch) ?? 0
+    cumulative.set(ch, Math.min(cap, cur + add))
+  }
+}
+
+/**
  * Greedy left-to-right: for each chase letter, consume from pool if available, else "_".
  * Example: STONE + pool {S,O,E} → "S _ O _ E"
  */

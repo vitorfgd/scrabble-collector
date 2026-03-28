@@ -6,6 +6,7 @@ import { pickRandomChaseWord } from './chaseWordList.ts'
 import {
   countLetterMultiset,
   formatChaseProgressMask,
+  mergeDepositIntoCumulative,
   multisetCovers,
   multisetNeedFromWord,
 } from './chaseWordMultiset.ts'
@@ -17,14 +18,16 @@ export type ChaseWordDepositResult = {
 }
 
 /**
- * Letter-mode only: one active target word; multiset match on deposit grants bonus + new word.
- * Letters found toward the target persist in progress until the chase is completed (deposit),
+ * Letter-mode only: one active target word; cumulative deposits toward the multiset grant bonus + new word.
+ * Letters found toward the target persist in progress until the chase is completed,
  * not only while held on the stack.
  */
 export class ChaseWordSystem {
   private activeWord: string | null = null
   /** Letters collected toward the current target (capped per multiset need); survives deposits */
   private readonly bankedTowardChase = new Map<string, number>()
+  /** Letters deposited toward the current target (across multiple deposit trips); capped by need */
+  private readonly depositedTowardChase = new Map<string, number>()
   private readonly getSpawnMode: () => ItemSpawnMode
   private readonly economy: Economy
   private readonly onStateChanged: () => void
@@ -44,12 +47,14 @@ export class ChaseWordSystem {
     if (this.getSpawnMode() !== 'letter') {
       this.activeWord = null
       this.bankedTowardChase.clear()
+      this.depositedTowardChase.clear()
       this.onStateChanged()
       return
     }
     if (!this.activeWord) {
       this.activeWord = pickRandomChaseWord()
       this.bankedTowardChase.clear()
+      this.depositedTowardChase.clear()
     }
     this.onStateChanged()
   }
@@ -86,7 +91,8 @@ export class ChaseWordSystem {
 
   /**
    * After a deposit batch resolves (normal credits already applied).
-   * If letter multiset of this deposit covers the chase multiset, award bonus and roll target.
+   * Chase letters from this deposit merge into a running total; when that covers the multiset,
+   * award bonus and roll target (works across several partial deposits).
    */
   processLetterDeposit(items: GameItem[]): ChaseWordDepositResult {
     if (this.getSpawnMode() !== 'letter' || !this.activeWord) {
@@ -103,7 +109,8 @@ export class ChaseWordSystem {
     }
 
     const pool = countLetterMultiset(depositLetters)
-    if (!multisetCovers(need, pool)) {
+    mergeDepositIntoCumulative(need, this.depositedTowardChase, pool)
+    if (!multisetCovers(need, this.depositedTowardChase)) {
       return { chaseCompleted: false, completedWord: null, bonusCredits: 0 }
     }
 
@@ -111,6 +118,7 @@ export class ChaseWordSystem {
     this.economy.addMoney(bonus)
     const completedWord = target
     this.bankedTowardChase.clear()
+    this.depositedTowardChase.clear()
     this.activeWord = pickRandomChaseWord(target)
     this.onStateChanged()
 
