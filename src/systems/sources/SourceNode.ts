@@ -16,7 +16,9 @@ const DEPOSIT_CLEAR = { x: 0, z: 0, r: 3.4 }
 const SPAWN_ATTEMPTS = 14
 
 /**
- * One resource source: timed spawns inside a disk, faster when the player stands still inside.
+ * One resource source: timed spawns inside a disk.
+ * Spawn interval is shorter while the player is inside this disk; standing still inside
+ * also turns on the acceleration pulse visual after a short delay.
  */
 export class SourceNode {
   private readonly config: SourceNodeConfig
@@ -79,14 +81,15 @@ export class SourceNode {
       this.stillTimer = 0
     }
 
-    const accel =
+    const stillLongEnough =
       inside && this.stillTimer >= STILL_TIME_FOR_ACCEL_SEC
-    this.visual.setAccelerationVisual(accel, timeSec)
+    this.visual.setAccelerationVisual(stillLongEnough, timeSec)
 
     this.cooldown -= dt
     if (this.cooldown > 0) return
 
-    const interval = accel
+    /** Faster spawns whenever you stand in this zone (not only when motionless). */
+    const interval = inside
       ? BASE_SPAWN_INTERVAL_SEC / ACCEL_INTERVAL_FACTOR
       : BASE_SPAWN_INTERVAL_SEC
 

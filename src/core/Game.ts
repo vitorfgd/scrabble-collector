@@ -293,7 +293,15 @@ export class Game {
       })
       this.cameraRig.update(dt)
       this.itemWorld.updateVisuals(this.elapsedSec, dt)
+      const stackIdsBefore = new Set(
+        this.stack.getSnapshot().map((i) => i.id),
+      )
       this.collection.update(this.player, this.stack, this.itemWorld)
+      for (const it of this.stack.getSnapshot()) {
+        if (!stackIdsBefore.has(it.id)) {
+          this.chaseWord.onLetterCollected(it)
+        }
+      }
       this.itemWorld.updateCollectEffects(dt)
       this.stackVisual.update(dt)
       this.depositController.update(dt)
@@ -342,7 +350,7 @@ export class Game {
     hudChase.classList.remove('hidden')
     const t = this.chaseWord.getActiveTarget()
     hudChaseTarget.textContent = t ?? '—'
-    const progress = this.chaseWord.getProgressLine(this.stack.getSnapshot())
+    const progress = this.chaseWord.getProgressLine()
     hudChaseProgress.textContent = progress ? `PROGRESS: ${progress}` : ''
   }
 

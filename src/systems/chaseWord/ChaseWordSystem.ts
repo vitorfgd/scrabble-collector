@@ -18,9 +18,13 @@ export type ChaseWordDepositResult = {
 
 /**
  * Letter-mode only: one active target word; multiset match on deposit grants bonus + new word.
+ * Letters found toward the target persist in progress until the chase is completed (deposit),
+ * not only while held on the stack.
  */
 export class ChaseWordSystem {
   private activeWord: string | null = null
+  /** Letters collected toward the current target (capped per multiset need); survives deposits */
+  private readonly bankedTowardChase = new Map<string, number>()
   private readonly getSpawnMode: () => ItemSpawnMode
   private readonly economy: Economy
   private readonly onStateChanged: () => void
@@ -39,11 +43,13 @@ export class ChaseWordSystem {
   syncMode(): void {
     if (this.getSpawnMode() !== 'letter') {
       this.activeWord = null
+      this.bankedTowardChase.clear()
       this.onStateChanged()
       return
     }
     if (!this.activeWord) {
       this.activeWord = pickRandomChaseWord()
+      this.bankedTowardChase.clear()
     }
     this.onStateChanged()
   }
@@ -52,15 +58,30 @@ export class ChaseWordSystem {
     return this.getSpawnMode() === 'letter' ? this.activeWord : null
   }
 
-  /** Progress line e.g. "S _ O _ E" from current held letter items */
-  getProgressLine(heldItems: readonly GameItem[]): string {
+  /**
+   * Call when a new item is collected (pickup). Banks letters that count toward the chase.
+   */
+  onLetterCollected(item: GameItem): void {
+    if (this.getSpawnMode() !== 'letter' || !this.activeWord || item.type !== 'letter') {
+      return
+    }
+    const need = multisetNeedFromWord(this.activeWord)
+    const raw = item.letter.toUpperCase().replace(/[^A-Z]/g, '')
+    const ch = raw.slice(0, 1)
+    if (!ch) return
+    const cap = need.get(ch)
+    if (cap === undefined) return
+    const cur = this.bankedTowardChase.get(ch) ?? 0
+    if (cur >= cap) return
+    this.bankedTowardChase.set(ch, cur + 1)
+    this.onStateChanged()
+  }
+
+  /** Progress line e.g. "S _ O _ E" from letters banked toward this chase */
+  getProgressLine(): string {
     const target = this.getActiveTarget()
     if (!target) return ''
-    const letters = heldItems
-      .filter((i): i is Extract<GameItem, { type: 'letter' }> => i.type === 'letter')
-      .map((i) => i.letter)
-    const pool = countLetterMultiset(letters)
-    return formatChaseProgressMask(target, pool)
+    return formatChaseProgressMask(target, this.bankedTowardChase)
   }
 
   /**
@@ -89,6 +110,7 @@ export class ChaseWordSystem {
     const bonus = computeChaseWordBonus(target.length)
     this.economy.addMoney(bonus)
     const completedWord = target
+    this.bankedTowardChase.clear()
     this.activeWord = pickRandomChaseWord(target)
     this.onStateChanged()
 

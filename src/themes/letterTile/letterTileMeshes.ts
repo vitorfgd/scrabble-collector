@@ -8,29 +8,40 @@ import {
 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 
-const SIDE_COLOR = new Color(0xd8d0c4)
+const SIDE_COLOR = new Color(0xcfc6ba)
 
 function createLetterTexture(letter: string): CanvasTexture {
   const canvas = document.createElement('canvas')
-  canvas.width = 128
-  canvas.height = 128
+  canvas.width = 160
+  canvas.height = 160
   const ctx = canvas.getContext('2d')
   if (!ctx) {
     throw new Error('2D canvas not available')
   }
-  ctx.fillStyle = '#f2ebe0'
-  ctx.fillRect(0, 0, 128, 128)
-  ctx.strokeStyle = '#b8a990'
-  ctx.lineWidth = 6
-  ctx.strokeRect(4, 4, 120, 120)
-  ctx.fillStyle = '#1a1a22'
-  ctx.font = 'bold 78px system-ui, Segoe UI, sans-serif'
+  const g = ctx.createLinearGradient(0, 0, 160, 160)
+  g.addColorStop(0, '#faf6f0')
+  g.addColorStop(1, '#e8dfd4')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 160, 160)
+  ctx.strokeStyle = '#9a8b78'
+  ctx.lineWidth = 5
+  ctx.strokeRect(6, 6, 148, 148)
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(8, 8, 144, 144)
+  ctx.fillStyle = '#14141c'
+  ctx.font = 'bold 88px system-ui, "Segoe UI", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(letter, 64, 68)
+  ctx.shadowColor = 'rgba(255,255,255,0.35)'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetX = 0
+  ctx.shadowOffsetY = 1
+  ctx.fillText(letter, 80, 82)
 
   const tex = new CanvasTexture(canvas)
   tex.colorSpace = SRGBColorSpace
+  tex.anisotropy = 4
   return tex
 }
 
@@ -45,13 +56,13 @@ function createTileMesh(
   const topTex = createLetterTexture(letter)
   const topMat = new MeshStandardMaterial({
     map: topTex,
-    roughness: 0.55,
-    metalness: 0,
+    roughness: 0.48,
+    metalness: 0.04,
   })
   const sideMat = new MeshStandardMaterial({
     color: SIDE_COLOR,
-    roughness: 0.72,
-    metalness: 0,
+    roughness: 0.68,
+    metalness: 0.02,
   })
   const mats = [
     sideMat,
