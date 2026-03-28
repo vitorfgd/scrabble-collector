@@ -1,23 +1,28 @@
-# Build and deploy the Vite app to GitHub Pages from the default branch (main).
-# Repo Settings → Pages → Source: GitHub Actions.
+# Deploy Vite builds to subfolders on gh-pages so both versions coexist:
+#   https://<user>.github.io/scrabble-collector/version1/
+#   https://<user>.github.io/scrabble-collector/version2/
+#
+# - Push to `main`  → build with base /scrabble-collector/version1/ → deploy to version1/
+# - Push to `version2` → build with base /scrabble-collector/version2/ → deploy to version2/
+#
+# Repo Settings → Pages → Source: Deploy from branch → gh-pages / (root)
+# (Switch from “GitHub Actions” artifact deploy if you used that before.)
 
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, version2]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,26 +33,30 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set BASE_PATH and destination folder
+        id: paths
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "base=/${REPO}/version1/" >> $GITHUB_OUTPUT
+            echo "dest=version1" >> $GITHUB_OUTPUT
+          else
+            echo "base=/${REPO}/version2/" >> $GITHUB_OUTPUT
+            echo "dest=version2" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install
         run: npm ci
 
       - name: Build
         run: npm run build
         env:
-          # Project site: https://<user>.github.io/<repo>/
-          BASE_PATH: /${{ github.event.repository.name }}/
+          BASE_PATH: ${{ steps.paths.outputs.base }}
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: ${{ steps.paths.outputs.dest }}
+          keep_files: true
