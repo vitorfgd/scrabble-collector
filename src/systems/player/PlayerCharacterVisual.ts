@@ -13,6 +13,8 @@ export type PlayerCharacterAnimState = {
   timeSec: number
   /** Horizontal speed (world XZ) */
   speed: number
+  /** Velocity X (world) for lateral lean */
+  velX: number
   itemsCarried: number
   maxCarry: number
 }
@@ -96,7 +98,7 @@ export class PlayerCharacterVisual {
    * Lightweight procedural motion: idle breathe, move bounce/tilt, stack lean.
    */
   update(_dt: number, state: PlayerCharacterAnimState): void {
-    const { timeSec, speed, itemsCarried, maxCarry } = state
+    const { timeSec, speed, velX, itemsCarried, maxCarry } = state
     const moving = speed > 0.35
     const carryT = maxCarry > 0 ? itemsCarried / maxCarry : 0
 
@@ -114,7 +116,9 @@ export class PlayerCharacterVisual {
     const tiltFwd = moving ? 0.07 : 0
     this.leanGroup.rotation.x = leanBack + tiltFwd
 
-    const sway = moving ? Math.sin(timeSec * 11) * 0.04 : 0
-    this.leanGroup.rotation.z = sway
+    const maxS = 12
+    const steer = Math.max(-1, Math.min(1, velX / maxS))
+    const sway = moving ? Math.sin(timeSec * 11) * 0.028 : 0
+    this.leanGroup.rotation.z = sway + steer * -0.11
   }
 }

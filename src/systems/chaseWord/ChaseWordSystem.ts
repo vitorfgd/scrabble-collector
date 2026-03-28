@@ -8,6 +8,7 @@ import {
   formatChaseProgressMask,
   mergeDepositIntoCumulative,
   multisetCovers,
+  multisetEquals,
   multisetNeedFromWord,
 } from './chaseWordMultiset.ts'
 
@@ -87,6 +88,50 @@ export class ChaseWordSystem {
     const target = this.getActiveTarget()
     if (!target) return ''
     return formatChaseProgressMask(target, this.bankedTowardChase)
+  }
+
+  /** Count of "_" tokens for “close to complete” juice */
+  getChaseGapCount(): number {
+    const line = this.getProgressLine()
+    if (!line) return 99
+    return line.split(' ').filter((x) => x === '_').length
+  }
+
+  /**
+   * Read-only: would this deposit batch complete the chase, and is it a perfect multiset match?
+   */
+  previewOverloadAfterDeposit(items: GameItem[]): {
+    completesChase: boolean
+    perfectChase: boolean
+  } {
+    if (this.getSpawnMode() !== 'letter' || !this.activeWord) {
+      return { completesChase: false, perfectChase: false }
+    }
+    const target = this.activeWord
+    const need = multisetNeedFromWord(target)
+    const depositLetters = items
+      .filter((i): i is Extract<GameItem, { type: 'letter' }> => i.type === 'letter')
+      .map((i) => i.letter)
+    if (depositLetters.length === 0) {
+      return { completesChase: false, perfectChase: false }
+    }
+    const poolFull = countLetterMultiset(depositLetters)
+    const poolRelevant = new Map<string, number>()
+    for (const [ch, n] of poolFull) {
+      if (need.has(ch)) poolRelevant.set(ch, n)
+    }
+    const remainingNeed = new Map<string, number>()
+    for (const [ch, n] of need) {
+      const have = this.depositedTowardChase.get(ch) ?? 0
+      const r = n - have
+      if (r > 0) remainingNeed.set(ch, r)
+    }
+    const temp = new Map(this.depositedTowardChase)
+    mergeDepositIntoCumulative(need, temp, poolFull)
+    const completesChase = multisetCovers(need, temp)
+    const perfectChase =
+      completesChase && multisetEquals(remainingNeed, poolRelevant)
+    return { completesChase, perfectChase }
   }
 
   /**

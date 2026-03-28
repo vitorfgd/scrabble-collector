@@ -13,6 +13,13 @@
   <body>
     <div id="app">
       <div id="game-viewport" aria-label="Game view">
+        <div id="hud-bootstrap" class="hud-bootstrap" aria-hidden="true">
+          Collect!
+        </div>
+        <div id="hud-objective" class="hud-objective" aria-live="polite"></div>
+        <div id="hud-idle-hint" class="hud-idle-hint hidden" aria-live="polite">
+          Drag to move
+        </div>
         <div id="hud-chase" class="hud-chase hidden" aria-live="polite">
           <div class="hud-chase-row">
             <span class="hud-chase-tag">TARGET</span>
@@ -20,7 +27,7 @@
           </div>
           <div id="hud-chase-progress" class="hud-chase-progress"></div>
         </div>
-        <div id="hud-chase-toast" class="chase-toast hidden" aria-live="polite">
+        <div id="hud-chase-toast" class="chase-toast chase-toast--layer hidden" aria-live="polite">
           <div class="chase-toast-title">CHASE COMPLETE!</div>
           <div class="chase-toast-word"></div>
           <div class="chase-toast-bonus"></div>
@@ -32,6 +39,10 @@
             <span id="hud-money">$0</span>
           </div>
           <div id="hud-spawn" class="hud-spawn"></div>
+        </div>
+        <div id="hud-overload" class="hud-overload hidden" aria-live="polite">
+          <div class="hud-overload-label">OVERLOAD</div>
+          <div class="hud-overload-amount"></div>
         </div>
         <div id="hud-deposit-toast" class="deposit-toast hidden" aria-live="polite">
           <div class="deposit-amount"></div>

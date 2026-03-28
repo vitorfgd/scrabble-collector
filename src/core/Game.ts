@@ -2,9 +2,13 @@ import type { Group } from 'three'
 import type { PerspectiveCamera } from 'three'
 import type { Scene } from 'three'
 import type { WebGLRenderer } from 'three'
+import { Vector3 } from 'three'
 import { CameraRig } from '../systems/camera/CameraRig.ts'
 import { CollectionSystem } from '../systems/collection/CollectionSystem.ts'
-import { DepositController } from '../systems/deposit/DepositController.ts'
+import {
+  DepositController,
+  type DepositPresentationOverload,
+} from '../systems/deposit/DepositController.ts'
 import { DepositFlightAnimator } from '../systems/deposit/DepositFlightAnimator.ts'
 import { DepositZoneFeedback } from '../systems/deposit/DepositZoneFeedback.ts'
 import { Economy } from '../systems/economy/Economy.ts'
@@ -31,6 +35,19 @@ import { UpgradeZoneSystem } from '../systems/upgrades/UpgradeZoneSystem.ts'
 import { INITIAL_STACK_CAPACITY } from '../systems/upgrades/upgradeConfig.ts'
 import { spawnUpgradeSpendCoins } from '../systems/upgrades/upgradeSpendVfx.ts'
 import { ChaseWordSystem } from '../systems/chaseWord/ChaseWordSystem.ts'
+import {
+  DEFAULT_RESOURCE_SOURCES,
+  getSpawnNearPrimarySource,
+} from '../systems/sources/defaultSources.ts'
+import {
+  BOOTSTRAP_HINT_MS,
+  IDLE_HINT_AFTER_SEC,
+  IDLE_SPEED_MAX,
+} from '../juice/juiceConfig.ts'
+import { OVERLOAD_STACK_THRESHOLD } from '../systems/overload/overloadDropConfig.ts'
+import { MoneyHud } from '../juice/MoneyHud.ts'
+import { spawnFloatingHudText } from '../juice/floatingHud.ts'
+import { playJuiceSound } from '../juice/juiceSound.ts'
 
 const DEPOSIT_TOAST_MS = 2800
 const CHASE_TOAST_MS = 3200
@@ -75,12 +92,22 @@ export class Game {
   private readonly chaseWord: ChaseWordSystem
   private depositToastTimer: ReturnType<typeof setTimeout> | null = null
   private chaseToastTimer: ReturnType<typeof setTimeout> | null = null
+  private overloadHudTimer: ReturnType<typeof setTimeout> | null = null
+  private overloadSession: { active: boolean; perfect: boolean } | null = null
   private raf = 0
   private lastTime = performance.now()
   private elapsedSec = 0
   private spawnMode: ItemSpawnMode
   private hudSpawn: HTMLElement | null = null
   private hudLetters: HTMLElement | null = null
+  private readonly moneyHud: MoneyHud | null
+  private readonly gameViewport: HTMLElement
+  private readonly velScratch = new Vector3()
+  private readonly playerPos = new Vector3()
+  private idleSec = 0
+  private bootstrapHintEl: HTMLElement | null = null
+  private objectiveEl: HTMLElement | null = null
+  private idleHintEl: HTMLElement | null = null
 
   private readonly onSpawnModeKey = (e: KeyboardEvent): void => {
     if (e.code === 'Digit1') {
@@ -99,6 +126,8 @@ export class Game {
 
   constructor(host: HTMLElement) {
     this.hostEl = host
+    this.gameViewport =
+      host.querySelector<HTMLElement>('#game-viewport') ?? host
     const {
       scene,
       playerRoot,
@@ -130,6 +159,10 @@ export class Game {
     )
     this.hudSpawn = host.querySelector('#hud-spawn')
     this.hudLetters = host.querySelector('#hud-letters')
+    const hudOverload = host.querySelector<HTMLElement>('#hud-overload')
+    const hudOverloadAmount = hudOverload?.querySelector<HTMLElement>(
+      '.hud-overload-amount',
+    )
     const hudChaseToast = host.querySelector<HTMLElement>('#hud-chase-toast')
     const chaseToastWordEl = hudChaseToast?.querySelector<HTMLElement>(
       '.chase-toast-word',
@@ -154,12 +187,15 @@ export class Game {
     this.joystick = new TouchJoystick(host)
     this.player = new PlayerController(playerRoot)
     this.playerCharacter = playerCharacter
-    this.cameraRig = new CameraRig(this.camera, playerRoot)
+    this.cameraRig = new CameraRig(this.camera, playerRoot, () =>
+      this.stack.count,
+    )
 
-    this.economy = new Economy(undefined, (money) => {
-      if (hudMoney) hudMoney.textContent = `$${money}`
-    })
-    if (hudMoney) hudMoney.textContent = `$${this.economy.money}`
+    this.economy = new Economy()
+    this.moneyHud = hudMoney
+      ? new MoneyHud(hudMoney, () => this.economy.money)
+      : null
+    this.moneyHud?.sync()
 
     this.stackVisual = new StackVisual(stackAnchor)
     this.stack = new CarryStack(INITIAL_STACK_CAPACITY, () => {
@@ -199,11 +235,22 @@ export class Game {
     this.refreshSpawnHud()
     window.addEventListener('keydown', this.onSpawnModeKey)
 
+    this.seedBootstrapPickups()
+
+    this.bootstrapHintEl = host.querySelector('#hud-bootstrap')
+    this.objectiveEl = host.querySelector('#hud-objective')
+    this.idleHintEl = host.querySelector('#hud-idle-hint')
+    setTimeout(() => {
+      this.bootstrapHintEl?.classList.add('hud-bootstrap--out')
+      setTimeout(() => this.bootstrapHintEl?.classList.add('hidden'), 380)
+    }, BOOTSTRAP_HINT_MS)
+
     this.collection = new CollectionSystem()
 
     this.depositFeedback = new DepositZoneFeedback(
       depositZoneMesh,
       depositRingMesh,
+      depositRoot,
     )
 
     this.depositFlight = new DepositFlightAnimator()
@@ -215,12 +262,63 @@ export class Game {
       stackVisual: this.stackVisual,
       economy: this.economy,
       flight: this.depositFlight,
-      onDepositPresentationComplete: (items, ev) => {
-        this.depositFeedback.trigger()
+      evaluateOverload: (snapshot) => {
+        const preview = this.chaseWord.previewOverloadAfterDeposit([...snapshot])
+        const largeStack = snapshot.length >= OVERLOAD_STACK_THRESHOLD
+        const overload = largeStack || preview.completesChase
+        const perfect =
+          snapshot.length >= this.stack.maxCapacity || preview.perfectChase
+        return { overload, perfect }
+      },
+      onDepositSessionStart: (meta) => {
+        this.overloadSession = { active: meta.overload, perfect: meta.perfect }
+      },
+      onDepositSessionEnd: () => {
+        this.overloadSession = null
+      },
+      onItemDepositLanded: (item) => {
+        if (this.overloadSession?.active) {
+          this.depositFeedback.triggerOverloadItemImpact(
+            this.overloadSession.perfect,
+          )
+          playJuiceSound('overload_impact')
+        } else {
+          this.depositFeedback.triggerItem()
+          spawnFloatingHudText(
+            this.gameViewport,
+            `+$${item.value}`,
+            'float-hud--coin',
+          )
+          playJuiceSound('deposit_item')
+        }
+      },
+      onDepositPresentationComplete: (items, ev, ol) => {
+        if (ol.overloadActive) {
+          this.depositFeedback.triggerOverloadBurst(ol.perfect)
+        } else {
+          this.depositFeedback.trigger()
+        }
         if (hudMoney) {
           hudMoney.classList.remove('money-bump')
           void hudMoney.offsetWidth
           hudMoney.classList.add('money-bump')
+        }
+        const totalPayout = ev.credits + ol.overloadBonus
+        if (
+          hudOverload &&
+          hudOverloadAmount &&
+          ol.overloadActive
+        ) {
+          if (this.overloadHudTimer) clearTimeout(this.overloadHudTimer)
+          hudOverloadAmount.textContent = `+$${totalPayout}`
+          hudOverload.classList.toggle('hud-overload--perfect', ol.perfect)
+          hudOverload.classList.remove('hidden')
+          hudOverload.classList.add('visible')
+          this.overloadHudTimer = setTimeout(() => {
+            hudOverload.classList.remove('visible', 'hud-overload--perfect')
+            hudOverload.classList.add('hidden')
+            this.overloadHudTimer = null
+          }, 2400)
         }
         if (
           hudDepositToast &&
@@ -234,6 +332,7 @@ export class Game {
             depositWordEl,
             depositHintEl,
             ev,
+            ol,
           )
           hudDepositToast.classList.remove('hidden')
           hudDepositToast.classList.add('visible')
@@ -256,9 +355,13 @@ export class Game {
           chaseToastWordEl.textContent = chase.completedWord
           chaseToastBonusEl.textContent = `+${chase.bonusCredits} bonus gold`
           hudChaseToast.classList.remove('hidden')
-          hudChaseToast.classList.add('visible')
+          hudChaseToast.classList.add('visible', 'chase-toast--celebrate')
+          playJuiceSound('deposit_complete')
           this.chaseToastTimer = setTimeout(() => {
-            hudChaseToast.classList.remove('visible')
+            hudChaseToast.classList.remove(
+              'visible',
+              'chase-toast--celebrate',
+            )
             hudChaseToast.classList.add('hidden')
             this.chaseToastTimer = null
           }, CHASE_TOAST_MS)
@@ -285,21 +388,26 @@ export class Game {
 
       const j = this.joystick.getVector()
       this.player.update(dt, j)
+      this.player.getVelocity(this.velScratch)
       this.playerCharacter.update(dt, {
         timeSec: this.elapsedSec,
         speed: this.player.getHorizontalSpeed(),
+        velX: this.velScratch.x,
         itemsCarried: this.stack.count,
         maxCarry: this.stack.maxCapacity,
       })
       this.cameraRig.update(dt)
+      this.moneyHud?.update(dt)
       this.itemWorld.updateVisuals(this.elapsedSec, dt)
       const stackIdsBefore = new Set(
         this.stack.getSnapshot().map((i) => i.id),
       )
-      this.collection.update(this.player, this.stack, this.itemWorld)
+      this.collection.update(this.player, this.stack, this.itemWorld, dt)
       for (const it of this.stack.getSnapshot()) {
         if (!stackIdsBefore.has(it.id)) {
           this.chaseWord.onLetterCollected(it)
+          spawnFloatingHudText(this.gameViewport, '+1', 'float-hud--pickup')
+          playJuiceSound('pickup')
         }
       }
       this.itemWorld.updateCollectEffects(dt)
@@ -308,6 +416,8 @@ export class Game {
       this.depositFeedback.update(dt)
       this.upgradeZones.update()
       this.resourceSources.update(dt, this.elapsedSec)
+
+      this.updateObjectiveAndIdleHints(dt)
 
       this.renderer.render(scene, this.camera)
     }
@@ -351,7 +461,76 @@ export class Game {
     const t = this.chaseWord.getActiveTarget()
     hudChaseTarget.textContent = t ?? '—'
     const progress = this.chaseWord.getProgressLine()
-    hudChaseProgress.textContent = progress ? `PROGRESS: ${progress}` : ''
+    const gaps = this.chaseWord.getChaseGapCount()
+    hudChase.classList.toggle('hud-chase--close', gaps > 0 && gaps <= 2)
+    hudChaseProgress.textContent = ''
+    if (progress) {
+      hudChaseProgress.appendChild(document.createTextNode('PROGRESS: '))
+      for (const token of progress.split(' ')) {
+        const span = document.createElement('span')
+        span.textContent = `${token} `
+        if (token === '_') span.className = 'chase-gap'
+        hudChaseProgress.appendChild(span)
+      }
+    }
+  }
+
+  private seedBootstrapPickups(): void {
+    const base = getSpawnNearPrimarySource(2.35)
+    const offsets: [number, number][] = [
+      [1.05, 0.35],
+      [-0.55, 1.05],
+      [0.35, -0.85],
+    ]
+    for (const [dx, dz] of offsets) {
+      const item =
+        this.spawnMode === 'crystal'
+          ? this.createCrystalSpawnItem()
+          : createVowelLetterItem()
+      this.itemWorld.spawn(item, base.x + dx, base.z + dz)
+    }
+  }
+
+  private updateObjectiveAndIdleHints(dt: number): void {
+    if (this.objectiveEl) {
+      this.objectiveEl.textContent =
+        this.stack.count === 0
+          ? 'Pick up items in the colored zones'
+          : 'Deposit at the bright gold circle (center)'
+    }
+
+    const speed = this.player.getHorizontalSpeed()
+    if (speed < IDLE_SPEED_MAX) {
+      this.idleSec += dt
+    } else {
+      this.idleSec = 0
+    }
+
+    this.player.getPosition(this.playerPos)
+    const px = this.playerPos.x
+    const pz = this.playerPos.z
+    let inSource = false
+    const probeR = 5.75
+    const r2 = probeR * probeR
+    for (const s of DEFAULT_RESOURCE_SOURCES) {
+      const dx = px - s.worldX
+      const dz = pz - s.worldZ
+      if (dx * dx + dz * dz <= r2) {
+        inSource = true
+        break
+      }
+    }
+
+    if (
+      this.idleHintEl &&
+      this.idleSec > IDLE_HINT_AFTER_SEC &&
+      speed < IDLE_SPEED_MAX &&
+      !inSource
+    ) {
+      this.idleHintEl.classList.remove('hidden')
+    } else {
+      this.idleHintEl?.classList.add('hidden')
+    }
   }
 
   private refreshLettersHud(): void {
@@ -375,18 +554,42 @@ export class Game {
     wordEl: HTMLElement,
     hintEl: HTMLElement,
     ev: DepositEval,
+    overload?: DepositPresentationOverload,
   ): void {
-    amountEl.textContent = ev.credits > 0 ? `+$${ev.credits}` : '$0'
+    const total = ev.credits + (overload?.overloadBonus ?? 0)
+    amountEl.classList.remove(
+      'deposit-amount--overload',
+      'deposit-amount--overload-perfect',
+    )
+    if (overload?.overloadActive) {
+      amountEl.textContent = total > 0 ? `+$${total}` : '$0'
+      amountEl.classList.add('deposit-amount--overload')
+      if (overload.perfect) amountEl.classList.add('deposit-amount--overload-perfect')
+    } else {
+      amountEl.textContent = ev.credits > 0 ? `+$${ev.credits}` : '$0'
+    }
     if (ev.letterWord.length === 0) {
       wordEl.textContent = ''
       wordEl.style.display = 'none'
-      hintEl.textContent = ''
-      hintEl.style.display = 'none'
+      if (overload?.overloadActive) {
+        hintEl.style.display = 'block'
+        hintEl.textContent = overload.perfect
+          ? 'Perfect overload — maximum burst'
+          : 'Overload drop — bonus credits'
+      } else {
+        hintEl.textContent = ''
+        hintEl.style.display = 'none'
+      }
       return
     }
     wordEl.style.display = 'block'
     wordEl.textContent = ev.letterWord
-    if (ev.wordValid === true) {
+    if (overload?.overloadActive) {
+      hintEl.style.display = 'block'
+      hintEl.textContent = overload.perfect
+        ? 'Perfect overload — maximum burst'
+        : 'Overload drop — bonus credits'
+    } else if (ev.wordValid === true) {
       hintEl.style.display = 'block'
       hintEl.textContent = 'Valid word — bonus applied'
     } else if (ev.wordValid === false) {
@@ -409,6 +612,7 @@ export class Game {
     window.removeEventListener('keydown', this.onSpawnModeKey)
     if (this.depositToastTimer) clearTimeout(this.depositToastTimer)
     if (this.chaseToastTimer) clearTimeout(this.chaseToastTimer)
+    if (this.overloadHudTimer) clearTimeout(this.overloadHudTimer)
     this.resourceSources.dispose()
     this.joystick.dispose()
     this.unsubscribeResize()

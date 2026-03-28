@@ -3,6 +3,10 @@ import type { Mesh } from 'three'
 import { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createStackMesh } from '../items/ItemVisuals.ts'
+import {
+  STACK_ADD_BOUNCE,
+  STACK_BOUNCE_DECAY,
+} from '../../juice/juiceConfig.ts'
 
 const STEP_Y = 0.44
 const SPAWN_SCALE = 0.14
@@ -43,11 +47,12 @@ export class StackVisual {
       const mesh = createStackMesh(item)
       mesh.userData.stackItemId = item.id
       const i = items.length - 1
-      mesh.position.y = i * STEP_Y
+      mesh.position.y = i * STEP_Y + STACK_ADD_BOUNCE * STEP_Y
       mesh.position.x = 0
       mesh.position.z = 0
       mesh.scale.setScalar(SPAWN_SCALE)
       mesh.userData.stackTargetScale = 1
+      mesh.userData.stackBounce = 1
       this.anchor.add(mesh)
       this.meshes.push(mesh)
       this.prevIds = ids
@@ -62,9 +67,16 @@ export class StackVisual {
   update(dt: number): void {
     const kScale = 1 - Math.exp(-16 * dt)
     const kY = 1 - Math.exp(-12 * dt)
+    const kB = 1 - Math.exp(-STACK_BOUNCE_DECAY * dt)
     this.meshes.forEach((mesh, i) => {
-      const targetY = i * STEP_Y
+      const bounce = (mesh.userData.stackBounce as number | undefined) ?? 0
+      const targetY = i * STEP_Y + bounce * STEP_Y * STACK_ADD_BOUNCE
       mesh.position.y += (targetY - mesh.position.y) * kY
+      if (bounce > 0.002) {
+        mesh.userData.stackBounce = bounce * (1 - kB)
+      } else {
+        mesh.userData.stackBounce = 0
+      }
       const target =
         (mesh.userData.stackTargetScale as number | undefined) ?? 1
       const s = mesh.scale.x

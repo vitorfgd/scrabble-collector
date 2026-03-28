@@ -1,16 +1,16 @@
 import type { Group, Mesh, Scene } from 'three'
+import type { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createPickupMesh } from './ItemVisuals.ts'
 import {
   attachPickupIdleMotion,
   updatePickupIdleMotion,
 } from './PickupMotion.ts'
+import { COLLECT_POP_SEC } from '../../juice/juiceConfig.ts'
 
 type Entry = { mesh: Mesh; item: GameItem }
 
 type CollectAnim = { mesh: Mesh; t: number }
-
-const COLLECT_POP_SEC = 0.22
 
 /**
  * Owns world pickups: logical `GameItem` + Three.js mesh.
@@ -58,6 +58,32 @@ export class ItemWorld {
   /**
    * After a successful stack push: remove from pickup sim, keep mesh for a short pop, then dispose.
    */
+  applyMagnetPull(
+    playerXZ: Vector3,
+    collectRadius: number,
+    magnetExtra: number,
+    pullSpeed: number,
+    dt: number,
+  ): void {
+    const innerR = collectRadius
+    const outerR = collectRadius + magnetExtra
+    const outerR2 = outerR * outerR
+    const innerR2 = innerR * innerR
+    for (const [, { mesh }] of this.byId) {
+      const dx = playerXZ.x - mesh.position.x
+      const dz = playerXZ.z - mesh.position.z
+      const d2 = dx * dx + dz * dz
+      if (d2 <= innerR2 || d2 > outerR2) continue
+      const d = Math.sqrt(d2) || 1e-6
+      const nx = dx / d
+      const nz = dz / d
+      const t = Math.min(1, (Math.sqrt(d2) - innerR) / magnetExtra)
+      const step = pullSpeed * dt * (0.35 + 0.65 * t * t)
+      mesh.position.x += nx * step
+      mesh.position.z += nz * step
+    }
+  }
+
   detachPickupForCollect(id: string): void {
     const e = this.byId.get(id)
     if (!e) return

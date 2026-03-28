@@ -14,9 +14,9 @@ import {
 } from 'three'
 
 /** Sparse dressing — sources carry gameplay; keep this light */
-const ROCK_COUNT = 8
-const BUSH_COUNT = 3
-const PLANT_COUNT = 4
+const ROCK_COUNT = 14
+const BUSH_COUNT = 5
+const PLANT_COUNT = 8
 
 const AVOID: ReadonlyArray<{ x: number; z: number; r: number }> = [
   { x: 0, z: 0, r: 4.5 },

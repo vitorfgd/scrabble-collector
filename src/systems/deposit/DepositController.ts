@@ -7,6 +7,11 @@ import {
   type DepositEval,
 } from '../economy/wordEvaluation.ts'
 import type { Economy } from '../economy/Economy.ts'
+import {
+  OVERLOAD_BONUS_MULT,
+  OVERLOAD_FLIGHT_DURATION_MULT,
+  PERFECT_OVERLOAD_BONUS_MULT,
+} from '../overload/overloadDropConfig.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
 import type { CarryStack } from '../stack/CarryStack.ts'
 import type { StackVisual } from '../stack/StackVisual.ts'
@@ -19,6 +24,17 @@ import {
 const p = new Vector3()
 const center = new Vector3()
 
+export type OverloadEvalResult = {
+  overload: boolean
+  perfect: boolean
+}
+
+export type DepositPresentationOverload = {
+  overloadActive: boolean
+  perfect: boolean
+  overloadBonus: number
+}
+
 export type DepositControllerOptions = {
   depositRoot: Group
   scene: Scene
@@ -28,14 +44,21 @@ export type DepositControllerOptions = {
   stackVisual: StackVisual
   economy: Economy
   flight: DepositFlightAnimator
-  /** After the last mesh lands (deposit zone pulse + HUD should run here) */
-  onDepositPresentationComplete: (items: GameItem[], ev: DepositEval) => void
+  evaluateOverload?: (snapshot: readonly GameItem[]) => OverloadEvalResult
+  onItemDepositLanded?: (item: GameItem) => void
+  onDepositSessionStart?: (meta: {
+    overload: boolean
+    perfect: boolean
+    itemCount: number
+  }) => void
+  onDepositSessionEnd?: () => void
+  onDepositPresentationComplete: (
+    items: GameItem[],
+    ev: DepositEval,
+    overload: DepositPresentationOverload,
+  ) => void
 }
 
-/**
- * Edge-triggered deposit: peel top-first; payout applies only to items whose flight
- * finished. Leaving mid-unload pays for completed flights and returns the rest.
- */
 export class DepositController {
   private readonly depositRoot: Group
   private readonly scene: Scene
@@ -45,13 +68,18 @@ export class DepositController {
   private readonly stackVisual: StackVisual
   private readonly economy: Economy
   private readonly flight: DepositFlightAnimator
+  private readonly evaluateOverload?: (snapshot: readonly GameItem[]) => OverloadEvalResult
   private readonly onDepositPresentationComplete: DepositControllerOptions['onDepositPresentationComplete']
+  private readonly onItemDepositLanded?: (item: GameItem) => void
+  private readonly onDepositSessionStart?: DepositControllerOptions['onDepositSessionStart']
+  private readonly onDepositSessionEnd?: () => void
 
   private wasInside = false
-  /** Immutable copy from edge entry; defines word order (bottom → top) for evaluation */
   private sessionSnapshot: GameItem[] | null = null
-  /** Items whose flight reached the deposit (mesh disposed); in-flight not included */
   private readonly depositedIds = new Set<string>()
+  private sessionOverload: { active: boolean; perfect: boolean; total: number } | null =
+    null
+  private peelIndex = 0
 
   constructor(opts: DepositControllerOptions) {
     this.depositRoot = opts.depositRoot
@@ -62,7 +90,11 @@ export class DepositController {
     this.stackVisual = opts.stackVisual
     this.economy = opts.economy
     this.flight = opts.flight
+    this.evaluateOverload = opts.evaluateOverload
     this.onDepositPresentationComplete = opts.onDepositPresentationComplete
+    this.onItemDepositLanded = opts.onItemDepositLanded
+    this.onDepositSessionStart = opts.onDepositSessionStart
+    this.onDepositSessionEnd = opts.onDepositSessionEnd
   }
 
   update(dt: number): void {
@@ -91,10 +123,35 @@ export class DepositController {
       const snapshot = [...this.stack.getSnapshot()]
       this.sessionSnapshot = snapshot
       this.depositedIds.clear()
+      const evo = this.evaluateOverload?.(snapshot) ?? {
+        overload: false,
+        perfect: false,
+      }
+      this.sessionOverload = {
+        active: evo.overload,
+        perfect: evo.perfect,
+        total: snapshot.length,
+      }
+      this.peelIndex = 0
+      this.onDepositSessionStart?.({
+        overload: evo.overload,
+        perfect: evo.perfect,
+        itemCount: snapshot.length,
+      })
       this.tryPeelNext()
     }
 
     this.wasInside = inside
+  }
+
+  private computeOverloadExtra(ev: DepositEval): number {
+    const s = this.sessionOverload
+    if (!s?.active) return 0
+    let extra = Math.floor(ev.credits * (OVERLOAD_BONUS_MULT - 1))
+    if (s.perfect) {
+      extra = Math.floor(extra * PERFECT_OVERLOAD_BONUS_MULT)
+    }
+    return Math.max(0, extra)
   }
 
   private tryPeelNext(): void {
@@ -106,34 +163,61 @@ export class DepositController {
       this.sessionSnapshot = null
       this.depositedIds.clear()
       const ev = evaluateDeposit(snapshot)
-      this.economy.addMoney(ev.credits)
-      this.onDepositPresentationComplete(snapshot, ev)
+      const overloadBonus = this.computeOverloadExtra(ev)
+      this.economy.addMoney(ev.credits + overloadBonus)
+      const s = this.sessionOverload
+      this.sessionOverload = null
+      this.peelIndex = 0
+      this.onDepositSessionEnd?.()
+      this.onDepositPresentationComplete(snapshot, ev, {
+        overloadActive: s?.active ?? false,
+        perfect: s?.perfect ?? false,
+        overloadBonus,
+      })
       return
     }
 
     const item = this.stack.popFromTop({ silent: true })
     if (!item) {
       this.sessionSnapshot = null
+      this.sessionOverload = null
+      this.peelIndex = 0
+      this.onDepositSessionEnd?.()
       this.depositedIds.clear()
       return
     }
     const mesh = this.stackVisual.extractTopMeshForDeposit(item)
     this.stack.notifyChange()
     this.depositRoot.getWorldPosition(center)
+    const spiralIndex = this.peelIndex
+    this.peelIndex += 1
     const onFlightDone = (): void => {
       this.depositedIds.add(item.id)
+      this.onItemDepositLanded?.(item)
       this.tryPeelNext()
     }
+    const ov = this.sessionOverload
+    const overloadStyle =
+      ov?.active === true
+        ? {
+            spiralIndex,
+            spiralTotal: ov.total,
+            perfect: ov.perfect,
+          }
+        : null
+    const dur =
+      DEPOSIT_FLIGHT_DURATION_SEC *
+      (ov?.active ? OVERLOAD_FLIGHT_DURATION_MULT : 1)
     this.flight.startOne(
       this.scene,
       mesh,
       center,
       onFlightDone,
-      DEPOSIT_FLIGHT_DURATION_SEC,
+      dur,
+      overloadStyle,
     )
   }
 
-  /** Leaving mid-unload: pay for landed items only; return gems not yet deposited. */
   private abortDepositSession(): void {
     if (this.sessionSnapshot === null) return
 
@@ -146,8 +230,12 @@ export class DepositController {
     const remaining = snapshot.filter((it) => !this.depositedIds.has(it.id))
 
     const ev = evaluateDeposit(completed)
-    this.economy.addMoney(ev.credits)
+    const overloadBonus = this.computeOverloadExtra(ev)
+    this.economy.addMoney(ev.credits + overloadBonus)
     this.stack.replaceItems(remaining)
     this.depositedIds.clear()
+    this.sessionOverload = null
+    this.peelIndex = 0
+    this.onDepositSessionEnd?.()
   }
 }

@@ -31,11 +31,11 @@ export function createSourceNodeVisual(
     new MeshStandardMaterial({
       color: new Color(tint),
       emissive: new Color(tint),
-      emissiveIntensity: 0.06,
+      emissiveIntensity: 0.09,
       roughness: 0.92,
       metalness: 0,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.28,
       depthWrite: false,
     }),
   )
@@ -51,7 +51,7 @@ export function createSourceNodeVisual(
     new MeshStandardMaterial({
       color: new Color(tint),
       emissive: new Color(tint),
-      emissiveIntensity: 0.14,
+      emissiveIntensity: 0.2,
       roughness: 0.65,
       metalness: 0.08,
       transparent: true,
@@ -69,6 +69,7 @@ export function createSourceNodeVisual(
   const ringMat = ring.material as MeshStandardMaterial
   const baseFillEmissive = fillMat.emissiveIntensity
   const baseRingEmissive = ringMat.emissiveIntensity
+  const baseFillOpacity = fillMat.opacity
 
   return {
     root,
@@ -76,13 +77,13 @@ export function createSourceNodeVisual(
       if (!active) {
         fillMat.emissiveIntensity = baseFillEmissive
         ringMat.emissiveIntensity = baseRingEmissive
-        fillMat.opacity = 0.22
+        fillMat.opacity = baseFillOpacity
         return
       }
       const pulse = 0.5 + 0.5 * Math.sin(timeSec * 5.2)
       fillMat.emissiveIntensity = baseFillEmissive + 0.1 * pulse
       ringMat.emissiveIntensity = baseRingEmissive + 0.22 * pulse
-      fillMat.opacity = 0.22 + 0.08 * pulse
+      fillMat.opacity = baseFillOpacity + 0.1 * pulse
     },
     dispose: () => {
       fill.geometry.dispose()

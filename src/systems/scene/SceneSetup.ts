@@ -141,13 +141,13 @@ export function createScene(): SceneContents {
   const depositZoneMesh = new Mesh(
     new CircleGeometry(depR, 56),
     new MeshStandardMaterial({
-      color: 0xf0c84a,
-      emissive: 0x9a6a08,
-      emissiveIntensity: 0.22,
-      roughness: 0.78,
-      metalness: 0.06,
+      color: 0xffd060,
+      emissive: 0xb87810,
+      emissiveIntensity: 0.28,
+      roughness: 0.72,
+      metalness: 0.08,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.94,
     }),
   )
   depositZoneMesh.name = 'depositZone'
@@ -166,13 +166,13 @@ export function createScene(): SceneContents {
   const plazaFloor = new Mesh(
     new PlaneGeometry(9.5, 4.2),
     new MeshStandardMaterial({
-      color: 0x252036,
-      emissive: 0x151028,
-      emissiveIntensity: 0.08,
+      color: 0x2e2848,
+      emissive: 0x1a1530,
+      emissiveIntensity: 0.12,
       roughness: 0.94,
-      metalness: 0.04,
+      metalness: 0.05,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.94,
     }),
   )
   plazaFloor.rotation.x = -Math.PI / 2

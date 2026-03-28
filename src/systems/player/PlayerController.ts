@@ -42,6 +42,11 @@ export class PlayerController {
     return out.copy(this.playerRoot.position)
   }
 
+  /** Horizontal velocity (XZ) for lean / animation */
+  getVelocity(out: Vector3): Vector3 {
+    return out.set(this.velocity.x, 0, this.velocity.z)
+  }
+
   /** Horizontal speed on XZ (for visuals / juice) */
   getHorizontalSpeed(): number {
     return Math.hypot(this.velocity.x, this.velocity.z)

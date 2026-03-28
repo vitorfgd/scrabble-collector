@@ -35,3 +35,17 @@ export const DEFAULT_RESOURCE_SOURCES: SourceNodeConfig[] = [
     letterKind: 'consonant',
   },
 ]
+
+export const PRIMARY_RESOURCE_SOURCE = DEFAULT_RESOURCE_SOURCES[0]!
+
+/** Point near NW source (for bootstrap pickups only) */
+export function getSpawnNearPrimarySource(
+  distTowardDeposit = 2.35,
+): { x: number; z: number } {
+  const sx = PRIMARY_RESOURCE_SOURCE.worldX
+  const sz = PRIMARY_RESOURCE_SOURCE.worldZ
+  const len = Math.hypot(sx, sz) || 1
+  const ux = -sx / len
+  const uz = -sz / len
+  return { x: sx + ux * distTowardDeposit, z: sz + uz * distTowardDeposit }
+}

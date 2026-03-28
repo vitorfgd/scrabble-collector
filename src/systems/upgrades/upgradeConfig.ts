@@ -16,5 +16,5 @@ export function speedUpgradeCost(currentUpgradeLevel: number): number {
 }
 
 export function speedForLevel(upgradeLevels: number): number {
-  return DEFAULT_PLAYER_MOVE_SPEED + upgradeLevels * 0.55
+  return DEFAULT_PLAYER_MOVE_SPEED + upgradeLevels * 0.68
 }

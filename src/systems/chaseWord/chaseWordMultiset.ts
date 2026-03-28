@@ -28,6 +28,18 @@ export function multisetCovers(
   return true
 }
 
+/** Exact multiset equality (same letter counts). */
+export function multisetEquals(
+  need: Map<string, number>,
+  pool: Map<string, number>,
+): boolean {
+  if (need.size !== pool.size) return false
+  for (const [ch, n] of need) {
+    if ((pool.get(ch) ?? 0) !== n) return false
+  }
+  return true
+}
+
 /**
  * Add this deposit's letter counts toward `cumulative`, capped per letter by `need`
  * (only letters in the chase word count).
