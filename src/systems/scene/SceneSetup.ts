@@ -83,7 +83,7 @@ export function createScene(): SceneContents {
   const moon = new DirectionalLight(0xd8e8f5, 0.95)
   moon.position.set(-8, 24, 12)
   moon.castShadow = true
-  moon.shadow.mapSize.setScalar(2048)
+  moon.shadow.mapSize.setScalar(1024)
   moon.shadow.camera.near = 0.5
   moon.shadow.camera.far = 72
   moon.shadow.camera.left = -36

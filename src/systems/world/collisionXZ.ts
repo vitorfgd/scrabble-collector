@@ -21,6 +21,7 @@ export function resolveCircleVsAabbs(
   let x = px
   let z = pz
   for (let iter = 0; iter < 8; iter++) {
+    let moved = false
     for (const b of boxes) {
       const qx = clamp(x, b.minX, b.maxX)
       const qz = clamp(z, b.minZ, b.maxZ)
@@ -39,6 +40,7 @@ export function resolveCircleVsAabbs(
         else if (m === dr) x = b.maxX + r + 0.02
         else if (m === db) z = b.minZ - r - 0.02
         else z = b.maxZ + r + 0.02
+        moved = true
         continue
       }
 
@@ -47,7 +49,9 @@ export function resolveCircleVsAabbs(
       dz /= d
       x = qx + dx * (r + 0.02)
       z = qz + dz * (r + 0.02)
+      moved = true
     }
+    if (!moved) break
   }
   return { x, z }
 }

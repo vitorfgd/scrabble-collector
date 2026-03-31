@@ -1,5 +1,6 @@
 import type { Object3D, Scene } from 'three'
 import { Mesh, Sprite, SpriteMaterial, Vector3 } from 'three'
+import { disposeWispGltfClone } from '../wisp/wispGltfAsset.ts'
 import {
   DEPOSIT_ARC_EASE,
   DEPOSIT_ARC_HEIGHT,
@@ -33,7 +34,8 @@ export class DepositFlightAnimator {
   private readonly end = new Vector3()
   private readonly mid = new Vector3()
   private overloadStyle: DepositFlightOverloadStyle | null = null
-  private onComplete: (() => void) | null = null
+  private onComplete: ((mesh: Object3D) => void) | null = null
+  private readonly worldPosScratch = new Vector3()
 
   get busy(): boolean {
     return this.active
@@ -55,7 +57,7 @@ export class DepositFlightAnimator {
     scene: Scene,
     mesh: Object3D,
     depositWorldPos: Vector3,
-    onComplete: () => void,
+    onComplete: (mesh: Object3D) => void,
     durationSec: number = DEPOSIT_FLIGHT_DURATION_SEC,
     overloadStyle: DepositFlightOverloadStyle | null = null,
   ): void {
@@ -76,10 +78,9 @@ export class DepositFlightAnimator {
       delete mesh.userData.depositWorldStart
     } else {
       mesh.updateMatrixWorld(true)
-      const fb = new Vector3()
-      mesh.getWorldPosition(fb)
-      mesh.position.copy(fb)
-      this.start.copy(fb)
+      mesh.getWorldPosition(this.worldPosScratch)
+      mesh.position.copy(this.worldPosScratch)
+      this.start.copy(this.worldPosScratch)
     }
 
     const arcMult = overloadStyle
@@ -130,14 +131,18 @@ export class DepositFlightAnimator {
     m.position.set(x, y, z)
 
     if (alpha >= 1) {
-      this.disposeMesh(m)
+      this.scene.remove(m)
       this.mesh = null
       this.overloadStyle = null
-      this.finish()
+      this.finish(m)
     }
   }
 
   private disposeMesh(root: Object3D): void {
+    if (root.userData.wispGltf === true) {
+      disposeWispGltfClone(root)
+      return
+    }
     this.scene?.remove(root)
     root.traverse((o) => {
       if (o instanceof Sprite) {
@@ -155,11 +160,11 @@ export class DepositFlightAnimator {
     })
   }
 
-  private finish(): void {
+  private finish(mesh: Object3D): void {
     this.active = false
     this.scene = null
     const cb = this.onComplete
     this.onComplete = null
-    cb?.()
+    cb?.(mesh)
   }
 }

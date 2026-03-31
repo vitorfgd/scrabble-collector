@@ -74,6 +74,7 @@ import {
   computeGhostPulsePhase,
   GHOST_PULSE_SPEED_MULTIPLIER,
 } from '../systems/ghostPulse/ghostPulseConfig.ts'
+import { PerfMonitor } from '../systems/debug/PerfMonitor.ts'
 
 const DEPOSIT_TOAST_MS = 2800
 
@@ -143,6 +144,13 @@ export class Game {
   private readonly hudUpgradeBarWrapEl: HTMLElement | null
   private readonly hudUpgradeBtnEl: HTMLButtonElement | null
   private readonly hudUpgradeCardEl: HTMLElement | null
+  private lastUpgradeHudKey = ''
+  private lastObjectiveText = ''
+  private lastPowerTintOn = false
+  private lastPowerTimerFill = -1
+  private lastPowerTimerLabel = ''
+  private lastGhostInvuln = false
+  private readonly perf = new PerfMonitor()
 
   constructor(host: HTMLElement, ghostGltfTemplate: GhostGltfTemplate | null = null) {
     this.hostEl = host
@@ -224,6 +232,7 @@ export class Game {
     this.refreshCarryValueHud()
 
     this.itemWorld = new ItemWorld(pickupGroup, scene)
+    this.itemWorld.prewarmWispPool(8)
     this.roomWispSpawns = new RoomWispSpawnSystem({
       itemWorld: this.itemWorld,
       roomSystem: this.roomSystem,
@@ -428,6 +437,7 @@ export class Game {
       const dt = Math.min(0.05, (now - this.lastTime) / 1000)
       this.lastTime = now
       this.elapsedSec += dt
+      this.perf.beginFrame(now)
 
       const j = this.joystick.getVector()
       this.player.update(dt, j)
@@ -470,7 +480,10 @@ export class Game {
       this.player.setPowerSpeedMultiplier(
         pulseGameplayActive ? GHOST_PULSE_SPEED_MULTIPLIER : 1,
       )
-      this.powerTintEl?.classList.toggle('hud-power-tint--on', pulseGameplayActive)
+      if (this.lastPowerTintOn !== pulseGameplayActive) {
+        this.powerTintEl?.classList.toggle('hud-power-tint--on', pulseGameplayActive)
+        this.lastPowerTintOn = pulseGameplayActive
+      }
       if (this.powerTimerEl && this.powerTimerFillEl) {
         this.powerTimerEl.hidden = false
         let fillPct = 0
@@ -485,15 +498,19 @@ export class Game {
           const intoIdle = Math.max(0, cyclePos - safeDur)
           fillPct = Math.min(100, (intoIdle / idleSpan) * 100)
         }
-        this.powerTimerFillEl.style.width = `${fillPct}%`
-        this.powerTimerTrackEl?.setAttribute(
-          'aria-valuenow',
-          String(Math.round(fillPct)),
-        )
-        this.powerTimerTrackEl?.setAttribute(
-          'aria-label',
-          pulse.active ? 'Pulse time remaining' : 'Time until next pulse',
-        )
+        const rounded = Math.round(fillPct)
+        if (rounded !== this.lastPowerTimerFill) {
+          this.powerTimerFillEl.style.width = `${fillPct}%`
+          this.powerTimerTrackEl?.setAttribute('aria-valuenow', String(rounded))
+          this.lastPowerTimerFill = rounded
+        }
+        const label = pulse.active
+          ? 'Pulse time remaining'
+          : 'Time until next pulse'
+        if (label !== this.lastPowerTimerLabel) {
+          this.powerTimerTrackEl?.setAttribute('aria-label', label)
+          this.lastPowerTimerLabel = label
+        }
       }
 
       if (
@@ -522,10 +539,11 @@ export class Game {
           this.ghostDamageArmed = true
         }
       }
-      this.gameViewport.classList.toggle(
-        'game-viewport--ghost-invuln',
-        this.ghostHitInvuln > 0,
-      )
+      const invuln = this.ghostHitInvuln > 0
+      if (invuln !== this.lastGhostInvuln) {
+        this.gameViewport.classList.toggle('game-viewport--ghost-invuln', invuln)
+        this.lastGhostInvuln = invuln
+      }
 
       if (this.ghostSystem.tryEatGhost(this.playerPos, this.player.radius)) {
         this.economy.addMoney(GHOST_EAT_MONEY_REWARD)
@@ -581,21 +599,16 @@ export class Game {
       }
       updateGhostHitBursts(this.burstParticles, dt)
 
-      const stackIdsBefore = new Set(
-        this.stack.getSnapshot().map((i) => i.id),
-      )
-      this.collection.update(this.player, this.stack, this.itemWorld, dt, {
+      const collected = this.collection.update(this.player, this.stack, this.itemWorld, dt, {
         pickupBlocked: this.ghostHitInvuln > 0,
       })
-      for (const it of this.stack.getSnapshot()) {
-        if (!stackIdsBefore.has(it.id)) {
-          if (it.type === 'wisp') {
-            spawnFloatingHudText(this.gameViewport, '+1', 'float-hud--pickup')
-            playJuiceSound('pickup')
-          } else if (it.type === 'relic') {
-            showRelicPickupHint(this.gameViewport)
-            playJuiceSound('pickup')
-          }
+      for (const { item } of collected) {
+        if (item.type === 'wisp') {
+          spawnFloatingHudText(this.gameViewport, '+1', 'float-hud--pickup')
+          playJuiceSound('pickup')
+        } else if (item.type === 'relic') {
+          showRelicPickupHint(this.gameViewport)
+          playJuiceSound('pickup')
         }
       }
 
@@ -626,6 +639,7 @@ export class Game {
       this.updateObjectiveAndIdleHints(dt)
 
       this.renderer.render(scene, this.camera)
+      this.perf.endFrame(this.renderer.info.render.calls, collected.length)
     }
 
     this.raf = requestAnimationFrame(tick)
@@ -640,10 +654,14 @@ export class Game {
 
   private updateObjectiveAndIdleHints(dt: number): void {
     if (this.objectiveEl) {
-      this.objectiveEl.textContent =
+      const text =
         this.stack.count === 0
           ? ''
           : 'Deposit at the bright gold circle (center)'
+      if (text !== this.lastObjectiveText) {
+        this.objectiveEl.textContent = text
+        this.lastObjectiveText = text
+      }
     }
 
     const speed = this.player.getHorizontalSpeed()
@@ -693,15 +711,21 @@ export class Game {
 
     const snap = this.upgradeZones.getHudSnapshot()
     if (!snap.visible) {
-      root.classList.add('hidden')
-      root.setAttribute('aria-hidden', 'true')
+      if (this.lastUpgradeHudKey !== 'hidden') {
+        root.classList.add('hidden')
+        root.setAttribute('aria-hidden', 'true')
+        this.lastUpgradeHudKey = 'hidden'
+      }
       return
     }
+    const pct = Math.min(100, Math.round(snap.progress * 100))
+    const key = `${snap.title}|${pct}|${snap.maxed ? 1 : 0}|${snap.cost}|${snap.canAfford ? 1 : 0}|${snap.accent}`
+    if (key === this.lastUpgradeHudKey) return
+    this.lastUpgradeHudKey = key
 
     root.classList.remove('hidden')
     root.setAttribute('aria-hidden', 'false')
     titleEl.textContent = snap.title
-    const pct = Math.min(100, Math.round(snap.progress * 100))
     barEl.style.width = `${pct}%`
     wrapEl?.setAttribute('aria-valuenow', String(pct))
     card.style.setProperty('--upgrade-accent', snap.accent)

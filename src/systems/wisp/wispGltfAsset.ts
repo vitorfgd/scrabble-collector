@@ -14,7 +14,6 @@ import {
   Vector3,
 } from 'three'
 import { clone as cloneSkeletonSafe } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 /** Served from `public/` (Vite). */
 export const WISP_GLTF_URL = '/assets/wisps/whisp.glb'
@@ -60,6 +59,7 @@ export function disposeWispPickupPrototype(): void {
 }
 
 export async function loadWispPickupGltf(url: string): Promise<boolean> {
+  const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
   const loader = new GLTFLoader()
   try {
     const gltf = await loader.loadAsync(url)
@@ -84,8 +84,8 @@ function tintWispMaterials(root: Group, hue: number): void {
   const emTint = new Color().setHSL(hue, 0.58, 0.52)
   root.traverse((o) => {
     if (!(o instanceof Mesh) && !(o instanceof SkinnedMesh)) return
-    o.castShadow = true
-    o.receiveShadow = true
+    o.castShadow = false
+    o.receiveShadow = false
     const mats = Array.isArray(o.material) ? o.material : [o.material]
     for (const mat of mats) {
       if (mat instanceof MeshStandardMaterial || mat instanceof MeshPhysicalMaterial) {

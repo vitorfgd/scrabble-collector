@@ -122,6 +122,10 @@ export class UpgradeZoneSystem {
     this.pulseFreqPad = opts.pulseFreqPad
     this.pulseDurationPad = opts.pulseDurationPad
     this.onSpendVfx = opts.onSpendVfx
+    this.refreshCapacityLabel()
+    this.refreshSpeedLabel()
+    this.refreshPulseFreqLabel()
+    this.refreshPulseDurationLabel()
   }
 
   getPulseIntervalSec(): number {
@@ -267,36 +271,36 @@ export class UpgradeZoneSystem {
       occK,
     )
 
-    type Cand = { kind: UpgradeSpendKind; d: number }
-    const cands: Cand[] = []
+    let bestKind: UpgradeSpendKind | null = null
+    let bestD = Number.POSITIVE_INFINITY
 
     this.capacityPad.root.getWorldPosition(center)
     let d = Math.hypot(p.x - center.x, p.z - center.z)
-    if (d <= UPGRADE_PAD_ZONE_RADIUS) cands.push({ kind: 'capacity', d })
+    if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
+      bestKind = 'capacity'
+      bestD = d
+    }
 
     this.speedPad.root.getWorldPosition(center)
     d = Math.hypot(p.x - center.x, p.z - center.z)
-    if (d <= UPGRADE_PAD_ZONE_RADIUS) cands.push({ kind: 'speed', d })
+    if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
+      bestKind = 'speed'
+      bestD = d
+    }
 
     this.pulseFreqPad.root.getWorldPosition(center)
     d = Math.hypot(p.x - center.x, p.z - center.z)
-    if (d <= UPGRADE_PAD_ZONE_RADIUS) cands.push({ kind: 'pulseFreq', d })
+    if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
+      bestKind = 'pulseFreq'
+      bestD = d
+    }
 
     this.pulseDurationPad.root.getWorldPosition(center)
     d = Math.hypot(p.x - center.x, p.z - center.z)
-    if (d <= UPGRADE_PAD_ZONE_RADIUS) cands.push({ kind: 'pulseDuration', d })
-
-    if (cands.length === 0) {
-      this.activeKind = null
-    } else {
-      cands.sort((a, b) => a.d - b.d)
-      this.activeKind = cands[0]!.kind
+    if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
+      bestKind = 'pulseDuration'
     }
-
-    this.refreshCapacityLabel()
-    this.refreshSpeedLabel()
-    this.refreshPulseFreqLabel()
-    this.refreshPulseDurationLabel()
+    this.activeKind = bestKind
   }
 
   private refreshCapacityLabel(): void {

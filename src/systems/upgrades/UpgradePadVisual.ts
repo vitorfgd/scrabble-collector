@@ -130,6 +130,7 @@ export function createUpgradePad(
   tex.colorSpace = SRGBColorSpace
 
   const accentHex = `#${ringColor.toString(16).padStart(6, '0')}`
+  let lastLabelTitle = title
 
   const draw = (p: PadLabelPayload): void => {
     const w = canvas.width
@@ -182,6 +183,8 @@ export function createUpgradePad(
   return {
     root,
     setLabel: (p: PadLabelPayload) => {
+      if (p.title === lastLabelTitle) return
+      lastLabelTitle = p.title
       draw(p)
       tex.needsUpdate = true
     },

@@ -1,4 +1,5 @@
 import { Vector3 } from 'three'
+import type { GameItem } from '../../core/types/GameItem.ts'
 import type { CarryStack } from '../stack/CarryStack.ts'
 import type { ItemWorld } from '../items/ItemWorld.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
@@ -18,14 +19,17 @@ export type CollectionCallbacks = {
 export class CollectionSystem {
   readonly pickupRadius = PICKUP_EXTRA_RADIUS
 
+  collectScratch: { id: string; item: GameItem }[] = []
+
   update(
     player: PlayerController,
     stack: CarryStack,
     itemWorld: ItemWorld,
     dt: number,
     callbacks?: CollectionCallbacks,
-  ): void {
-    if (callbacks?.pickupBlocked) return
+  ): { id: string; item: GameItem }[] {
+    this.collectScratch.length = 0
+    if (callbacks?.pickupBlocked) return this.collectScratch
 
     player.getPosition(p)
     itemWorld.applyMagnetPull(
@@ -46,7 +50,9 @@ export class CollectionSystem {
 
       if (stack.push(item)) {
         itemWorld.detachPickupForCollect(id)
+        this.collectScratch.push({ id, item })
       }
     }
+    return this.collectScratch
   }
 }

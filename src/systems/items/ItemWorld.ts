@@ -30,17 +30,39 @@ export class ItemWorld {
   private readonly scene: Scene
   private readonly collectAnims: CollectAnim[] = []
   private readonly pendingDisposals: Object3D[] = []
+  private readonly pooledWispMeshes: Object3D[] = []
 
   constructor(pickupGroup: Group, scene: Scene) {
     this.pickupGroup = pickupGroup
     this.scene = scene
   }
 
+  /**
+   * Pre-allocate wisp visuals to avoid first-spawn hitch when leaving the safe area.
+   */
+  prewarmWispPool(count: number): void {
+    const n = Math.max(0, Math.floor(count))
+    for (let i = 0; i < n; i++) {
+      const warmId = `__warm_wisp_${i}`
+      const mesh = createPickupMesh({
+        id: warmId,
+        kind: 'collectible',
+        type: 'wisp',
+        value: 0,
+        hue: 0.5,
+      })
+      if (!this.tryPoolMesh(mesh)) {
+        this.disposeMesh(mesh)
+      }
+    }
+  }
+
   spawn(item: GameItem, x: number, z: number): void {
     if (this.byId.has(item.id)) return
-    const mesh = createPickupMesh(item)
+    const mesh = this.obtainMesh(item)
     const y = mesh.position.y
     mesh.position.set(x, y, z)
+    mesh.visible = true
     attachPickupIdleMotion(mesh, 'wisp')
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
@@ -103,7 +125,9 @@ export class ItemWorld {
       }
       a.mesh.scale.setScalar(Math.max(0.001, s))
       if (p >= 1) {
-        this.pendingDisposals.push(a.mesh)
+        if (!this.tryPoolMesh(a.mesh)) {
+          this.pendingDisposals.push(a.mesh)
+        }
         this.collectAnims.splice(i, 1)
       }
     }
@@ -214,6 +238,31 @@ export class ItemWorld {
         else m.dispose()
       }
     })
+  }
+
+  private obtainMesh(item: GameItem): Object3D {
+    if (item.type === 'wisp' && this.pooledWispMeshes.length > 0) {
+      const mesh = this.pooledWispMeshes.pop()!
+      mesh.position.set(0, mesh.position.y, 0)
+      mesh.scale.setScalar(
+        (mesh.userData.wispBaseScale as number | undefined) ?? 1,
+      )
+      return mesh
+    }
+    return createPickupMesh(item)
+  }
+
+  private tryPoolMesh(root: Object3D): boolean {
+    if (root.userData.wispGltf === true || root.userData.wispBody) {
+      root.removeFromParent()
+      root.visible = false
+      const mix = root.userData.wispMixer as AnimationMixer | undefined
+      if (mix) mix.stopAllAction()
+      delete root.userData.pickupIdle
+      this.pooledWispMeshes.push(root)
+      return true
+    }
+    return false
   }
 
   private flushPendingDisposals(maxPerFrame: number): void {

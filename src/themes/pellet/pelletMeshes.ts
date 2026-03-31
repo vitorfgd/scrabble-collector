@@ -16,6 +16,7 @@ import {
 
 const SOUL_BODY_R = 0.1
 const SOUL_STACK_R = 0.06
+const RELIC_STACK_R = 0.27
 
 /** `hue` is Three.js HSL hue in the cyan–teal band (stored on `GameItem`). */
 function soulColors(hue: number): {
@@ -171,10 +172,10 @@ function createRelicStackMesh(hue: number): Mesh {
     roughness: 0.2,
     metalness: 0.32,
   })
-  const mesh = new Mesh(new OctahedronGeometry(SOUL_STACK_R * 1.05, 0), mat)
+  const mesh = new Mesh(new OctahedronGeometry(RELIC_STACK_R, 0), mat)
   mesh.castShadow = true
   mesh.receiveShadow = true
-  mesh.position.y = SOUL_STACK_R * 1.2
+  mesh.position.y = RELIC_STACK_R
   return mesh
 }
 

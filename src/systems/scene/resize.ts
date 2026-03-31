@@ -2,7 +2,7 @@ import type { PerspectiveCamera } from 'three'
 import type { WebGLRenderer } from 'three'
 
 export function getPixelRatio(): number {
-  return Math.min(window.devicePixelRatio, 2)
+  return Math.min(window.devicePixelRatio, 1.5)
 }
 
 export function updateViewportSize(

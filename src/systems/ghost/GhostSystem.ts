@@ -224,6 +224,7 @@ class Ghost {
   private readonly spawnZ: number
   private readonly materials: MeshStandardMaterial[]
   private readonly skinSnap: SkinSnap[]
+  private prevPowerMode = false
 
   private state: GhostBehaviorState = 'wander'
   private wanderAngle = Math.random() * Math.PI * 2
@@ -348,9 +349,10 @@ class Ghost {
         m.emissive.setHex(0x4488dd)
         m.emissiveIntensity = (0.38 + pulse * 0.48) * blink
       }
-    } else {
+    } else if (this.prevPowerMode) {
       this.resetSkin()
     }
+    this.prevPowerMode = powerMode
   }
 
   update(

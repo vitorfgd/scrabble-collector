@@ -1,6 +1,5 @@
 import type { AnimationClip, Group } from 'three'
 import { Mesh } from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 export type GhostGltfTemplate = {
   /** Root from GLTF; never added to scene — clones only. */
@@ -31,6 +30,7 @@ export async function loadGhostEnemyGltf(
   | { ok: true; template: GhostGltfTemplate }
   | { ok: false; error: string }
 > {
+  const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
   const loader = new GLTFLoader()
   try {
     const gltf = await loader.loadAsync(url)

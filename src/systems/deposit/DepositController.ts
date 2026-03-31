@@ -191,7 +191,8 @@ export class DepositController {
     this.depositRoot.getWorldPosition(center)
     const spiralIndex = this.peelIndex
     this.peelIndex += 1
-    const onFlightDone = (): void => {
+    const onFlightDone = (flightMesh: import('three').Object3D): void => {
+      this.stackVisual.recycleDepositedMesh(item, flightMesh)
       this.depositedIds.add(item.id)
       this.onItemDepositLanded?.(item)
       this.tryPeelNext()

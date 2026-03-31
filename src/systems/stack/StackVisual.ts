@@ -22,6 +22,9 @@ export class StackVisual {
   private meshes: Object3D[] = []
   private prevIds: string[] = []
   private readonly anchor: Object3D
+  private readonly poolWisp: Object3D[] = []
+  private readonly poolRelic: Object3D[] = []
+  private static readonly MAX_POOL = 64
 
   constructor(anchor: Object3D) {
     this.anchor = anchor
@@ -50,9 +53,10 @@ export class StackVisual {
 
     if (samePrefix && ids.length === this.prevIds.length + 1) {
       const item = items[items.length - 1]
-      const mesh = createStackMesh(item)
+      const mesh = this.obtainMesh(item)
       const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
       mesh.userData.stackItemId = item.id
+      mesh.userData.stackItemType = item.type
       const i = items.length - 1
       mesh.position.y = i * STEP_Y + STACK_ADD_BOUNCE * STEP_Y
       mesh.position.x = 0
@@ -113,16 +117,34 @@ export class StackVisual {
     const w = new Vector3()
     mesh.getWorldPosition(w)
     mesh.userData.depositWorldStart = w.clone()
+    mesh.userData.stackItemType = item.type
     this.anchor.remove(mesh)
     return mesh
+  }
+
+  recycleDepositedMesh(item: GameItem, mesh: Object3D): void {
+    mesh.removeFromParent()
+    mesh.visible = false
+    delete mesh.userData.stackItemId
+    delete mesh.userData.depositWorldStart
+    const mix = mesh.userData.wispMixer as AnimationMixer | undefined
+    if (mix) mix.stopAllAction()
+    if (item.type === 'wisp') {
+      if (this.poolWisp.length < StackVisual.MAX_POOL) this.poolWisp.push(mesh)
+      else this.disposeMesh(mesh)
+      return
+    }
+    if (this.poolRelic.length < StackVisual.MAX_POOL) this.poolRelic.push(mesh)
+    else this.disposeMesh(mesh)
   }
 
   private fullRebuild(items: readonly GameItem[]): void {
     this.clearMeshes()
     items.forEach((item, i) => {
-      const mesh = createStackMesh(item)
+      const mesh = this.obtainMesh(item)
       const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
       mesh.userData.stackItemId = item.id
+      mesh.userData.stackItemType = item.type
       mesh.userData.stackTargetScale = baseScale
       mesh.userData.stackBounce = 0
       mesh.position.y = i * STEP_Y
@@ -135,25 +157,54 @@ export class StackVisual {
   private clearMeshes(): void {
     for (const m of this.meshes) {
       this.anchor.remove(m)
-      if (m.userData.wispGltf === true) {
-        disposeWispGltfClone(m)
+      const t = m.userData.stackItemType as GameItem['type'] | undefined
+      if (t === 'wisp' && this.poolWisp.length < StackVisual.MAX_POOL) {
+        m.visible = false
+        this.poolWisp.push(m)
         continue
       }
-      m.traverse((o) => {
-        if (o instanceof Sprite) {
-          const sm = o.material as SpriteMaterial
-          sm.map?.dispose()
-          sm.dispose()
-          return
-        }
-        if (o instanceof Mesh) {
-          o.geometry.dispose()
-          const mat = o.material
-          if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
-          else mat.dispose()
-        }
-      })
+      if (t === 'relic' && this.poolRelic.length < StackVisual.MAX_POOL) {
+        m.visible = false
+        this.poolRelic.push(m)
+        continue
+      }
+      this.disposeMesh(m)
     }
     this.meshes = []
+  }
+
+  private obtainMesh(item: GameItem): Object3D {
+    if (item.type === 'wisp' && this.poolWisp.length > 0) {
+      const m = this.poolWisp.pop()!
+      m.visible = true
+      return m
+    }
+    if (item.type === 'relic' && this.poolRelic.length > 0) {
+      const m = this.poolRelic.pop()!
+      m.visible = true
+      return m
+    }
+    return createStackMesh(item)
+  }
+
+  private disposeMesh(m: Object3D): void {
+    if (m.userData.wispGltf === true) {
+      disposeWispGltfClone(m)
+      return
+    }
+    m.traverse((o) => {
+      if (o instanceof Sprite) {
+        const sm = o.material as SpriteMaterial
+        sm.map?.dispose()
+        sm.dispose()
+        return
+      }
+      if (o instanceof Mesh) {
+        o.geometry.dispose()
+        const mat = o.material
+        if (Array.isArray(mat)) mat.forEach((x) => x.dispose())
+        else mat.dispose()
+      }
+    })
   }
 }
