@@ -6,6 +6,7 @@ import {
   PlaneGeometry,
 } from 'three'
 import { MANSION_WALL_COLLIDERS } from '../world/mansionWalls.ts'
+import { addWallSconces } from './mansionSconces.ts'
 import { MANSION_WORLD_HALF } from '../world/mansionGeometry.ts'
 import { CORRIDOR_BOUNDS, ROOMS, type RoomId } from '../world/mansionRoomData.ts'
 
@@ -163,6 +164,7 @@ export function createMansionGround(): Group {
   }
 
   addWallMeshes(root)
+  addWallSconces(root)
   addEdgeVignette(root)
 
   return root
