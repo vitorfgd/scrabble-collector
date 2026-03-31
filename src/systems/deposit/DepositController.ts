@@ -5,7 +5,7 @@ import type { GameItem } from '../../core/types/GameItem.ts'
 import {
   evaluateDeposit,
   type DepositEval,
-} from '../economy/wordEvaluation.ts'
+} from '../economy/depositEvaluation.ts'
 import type { Economy } from '../economy/Economy.ts'
 import {
   OVERLOAD_BONUS_MULT,

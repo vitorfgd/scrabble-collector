@@ -20,7 +20,7 @@ export type DepositSystemOptions = {
 
 /**
  * Generic deposit: overlap circle vs player XZ, edge-trigger, drains stack into Economy.
- * Does not inspect crystal vs letter — only `GameItem[]` and payout resolver.
+ * Does not inspect item subtypes — only `GameItem[]` and payout resolver.
  */
 export class DepositSystem {
   private wasInside = false

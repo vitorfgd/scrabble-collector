@@ -1,15 +1,21 @@
 import {
+  AnimationAction,
+  AnimationClip,
+  AnimationMixer,
   Color,
   Group,
   LatheGeometry,
   Mesh,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Quaternion,
   SphereGeometry,
   Vector2,
   Vector3,
 } from 'three'
-import { GHOST_VISUAL_SCALE } from './ghostConfig.ts'
+import { clone as cloneSkinnedHierarchy } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import type { GhostGltfTemplate } from './ghostGltfAsset.ts'
+import { GHOST_GLB_Y_OFFSET, GHOST_GLB_YAW_OFFSET, GHOST_VISUAL_SCALE } from './ghostConfig.ts'
 
 /**
  * Silhouette from `version3` branch (`createGhostEnemy` / Pac-Man–style dome + skirt).
@@ -46,10 +52,134 @@ export function disposeGhostSharedGeometry(): void {
   PUPIL_GEO.dispose()
 }
 
+function findClip(
+  clips: readonly AnimationClip[],
+  keywords: string[],
+): AnimationClip | null {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '')
+  for (const kw of keywords) {
+    const k = norm(kw)
+    for (const c of clips) {
+      const n = norm(c.name)
+      if (n === k || n.includes(k)) return c
+    }
+  }
+  return null
+}
+
+function tintableMaterial(
+  m: unknown,
+): m is MeshStandardMaterial | MeshPhysicalMaterial {
+  return m instanceof MeshStandardMaterial || m instanceof MeshPhysicalMaterial
+}
+
+function applyBodyTint(model: Group, bodyColor: number): void {
+  const tint = new Color(bodyColor)
+  model.traverse((o) => {
+    if (o instanceof Mesh) {
+      const mat = o.material
+      const mats = Array.isArray(mat) ? mat : [mat]
+      for (const m of mats) {
+        if (tintableMaterial(m)) {
+          m.color.multiplyScalar(0.42).add(tint.clone().multiplyScalar(0.58))
+          m.emissive.lerp(tint, 0.22)
+        }
+      }
+    }
+  })
+}
+
+function createGltfGhostVisual(bodyColor: number, template: GhostGltfTemplate): Group {
+  const root = new Group()
+  const model = cloneSkinnedHierarchy(template.scenePrototype) as Group
+  model.name = 'ghostGltfModel'
+  model.position.y = GHOST_GLB_Y_OFFSET
+  model.rotation.y = GHOST_GLB_YAW_OFFSET
+  root.add(model)
+
+  const s = GHOST_VISUAL_SCALE
+  model.scale.setScalar(s)
+
+  model.traverse((o) => {
+    if (o instanceof Mesh) {
+      o.castShadow = true
+      o.receiveShadow = true
+      o.userData.isGhostBody = true
+    }
+  })
+  applyBodyTint(model, bodyColor)
+
+  const mixer = new AnimationMixer(model)
+  const clips = template.animations
+  const idleClip = findClip(clips, ['idle', 'Idle'])
+  const chaseClip = findClip(clips, [
+    'chasing',
+    'chase',
+    'Chase',
+    'Chasing',
+    'run',
+    'Run',
+  ])
+
+  let idleAction: AnimationAction | null = null
+  let chaseAction: AnimationAction | null = null
+  const CROSS = 0.32
+  let prevChase = false
+
+  if (idleClip) idleAction = mixer.clipAction(idleClip)
+  if (chaseClip) chaseAction = mixer.clipAction(chaseClip)
+
+  if (idleAction && chaseAction && idleClip !== chaseClip) {
+    idleAction.reset().setEffectiveWeight(1).play()
+    chaseAction.reset().setEffectiveWeight(0).play()
+  } else if (idleAction) {
+    idleAction.reset().fadeIn(0.12).play()
+  } else if (chaseAction) {
+    chaseAction.reset().fadeIn(0.12).play()
+  } else if (clips[0]) {
+    mixer.clipAction(clips[0]).reset().play()
+  }
+
+  const setChaseAnim = (chasing: boolean): void => {
+    if (!idleAction || !chaseAction || idleClip === chaseClip) return
+    if (chasing === prevChase) return
+    prevChase = chasing
+    if (chasing) {
+      idleAction.crossFadeTo(chaseAction, CROSS, false)
+    } else {
+      chaseAction.crossFadeTo(idleAction, CROSS, false)
+    }
+  }
+
+  root.userData.updateGhostAnimation = (
+    dt: number,
+    _timeSec: number,
+    _vx: number,
+    _vz: number,
+    chaseAnim?: boolean,
+  ): void => {
+    mixer.update(dt)
+    if (
+      idleAction &&
+      chaseAction &&
+      idleClip !== chaseClip &&
+      chaseAnim !== undefined
+    ) {
+      setChaseAnim(chaseAnim)
+    }
+  }
+
+  root.userData.disposeGhostAnim = (): void => {
+    mixer.stopAllAction()
+  }
+
+  return root
+}
+
 /**
- * Stylized ghost (dome + soft skirt via lathe). Matches repo `version3` enemy look + bob / pupils.
+ * Procedural fallback when GLB is unavailable or invalid.
  */
-export function createGhostVisual(bodyColor: number): Group {
+export function createProceduralGhostVisual(bodyColor: number): Group {
   const root = new Group()
   const bobGroup = new Group()
   bobGroup.name = 'ghostBob'
@@ -59,8 +189,8 @@ export function createGhostVisual(bodyColor: number): Group {
   const bodyMat = new MeshStandardMaterial({
     color: baseColor,
     emissive: baseColor.clone(),
-    emissiveIntensity: 0.38,
-    roughness: 0.38,
+    emissiveIntensity: 0.48,
+    roughness: 0.34,
     metalness: 0.08,
   })
 
@@ -75,8 +205,8 @@ export function createGhostVisual(bodyColor: number): Group {
   const eyeWhiteMat = new MeshStandardMaterial({
     color: 0xffffff,
     emissive: 0xffffff,
-    emissiveIntensity: 0.15,
-    roughness: 0.35,
+    emissiveIntensity: 0.22,
+    roughness: 0.32,
     metalness: 0,
   })
   const pupilMat = new MeshStandardMaterial({
@@ -154,4 +284,17 @@ export function createGhostVisual(bodyColor: number): Group {
 
   root.userData.bobGroup = bobGroup
   return root
+}
+
+/**
+ * Enemy visual: GLB (animated) when `gltf` is provided, else procedural lathe ghost.
+ */
+export function createGhostVisual(
+  bodyColor: number,
+  gltf?: GhostGltfTemplate | null,
+): Group {
+  if (gltf) {
+    return createGltfGhostVisual(bodyColor, gltf)
+  }
+  return createProceduralGhostVisual(bodyColor)
 }

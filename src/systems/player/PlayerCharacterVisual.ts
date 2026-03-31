@@ -17,7 +17,7 @@ export type PlayerCharacterAnimState = {
   velX: number
   itemsCarried: number
   maxCarry: number
-  /** Power pellet mode — shirt tint / emissive */
+  /** Ghost pulse (auto timed) — strong shirt / skin glow */
   powerMode?: boolean
   /** Ghost hit i-frames — blink read */
   ghostInvuln?: boolean
@@ -37,6 +37,8 @@ export class PlayerCharacterVisual {
   private readonly baseBobY: number
   private readonly shirtMat: MeshStandardMaterial
   private readonly shirtColorSnap: Color
+  private readonly skinMat: MeshStandardMaterial
+  private readonly skinColorSnap: Color
 
   constructor() {
     this.root = new Group()
@@ -51,21 +53,27 @@ export class PlayerCharacterVisual {
     this.bobGroup.add(this.leanGroup)
 
     const skin = new MeshStandardMaterial({
-      color: new Color(0xff7a4a),
-      roughness: 0.42,
+      color: new Color(0xff8a5c),
+      emissive: new Color(0x000000),
+      emissiveIntensity: 0,
+      roughness: 0.4,
       metalness: 0.08,
     })
+    this.skinMat = skin
+    this.skinColorSnap = skin.color.clone()
     const shirt = new MeshStandardMaterial({
-      color: new Color(0x3d9bcd),
-      roughness: 0.55,
+      color: new Color(0x4cb0e0),
+      emissive: new Color(0x1a4060),
+      emissiveIntensity: 0.12,
+      roughness: 0.5,
       metalness: 0.05,
     })
     this.shirtMat = shirt
     this.shirtColorSnap = shirt.color.clone()
     const dark = new MeshStandardMaterial({
-      color: new Color(0x2a2a34),
-      roughness: 0.7,
-      metalness: 0.1,
+      color: new Color(0x3a3c48),
+      roughness: 0.68,
+      metalness: 0.08,
     })
 
     const torso = new Mesh(
@@ -118,14 +126,23 @@ export class PlayerCharacterVisual {
         .lerp(new Color(0xffffff), on ? 0.38 : 0.06)
       this.shirtMat.emissive.setHex(on ? 0xccddee : 0x223344)
       this.shirtMat.emissiveIntensity = on ? 0.42 : 0.08
+      this.skinMat.color.copy(this.skinColorSnap)
+      this.skinMat.emissive.setHex(0x000000)
+      this.skinMat.emissiveIntensity = 0
     } else if (power) {
-      this.shirtMat.color.copy(this.shirtColorSnap).lerp(new Color(0x4ee8ff), 0.45)
-      this.shirtMat.emissive.setHex(0x1a6a8a)
-      this.shirtMat.emissiveIntensity = 0.28
+      this.shirtMat.color.copy(this.shirtColorSnap).lerp(new Color(0xffd080), 0.58)
+      this.shirtMat.emissive.setHex(0xc9a020)
+      this.shirtMat.emissiveIntensity = 0.62
+      this.skinMat.color.copy(this.skinColorSnap).lerp(new Color(0xffe8c8), 0.4)
+      this.skinMat.emissive.setHex(0x8a6010)
+      this.skinMat.emissiveIntensity = 0.26
     } else {
       this.shirtMat.color.copy(this.shirtColorSnap)
-      this.shirtMat.emissive.setHex(0x000000)
-      this.shirtMat.emissiveIntensity = 0
+      this.shirtMat.emissive.setHex(0x1a4060)
+      this.shirtMat.emissiveIntensity = 0.12
+      this.skinMat.color.copy(this.skinColorSnap)
+      this.skinMat.emissive.setHex(0x000000)
+      this.skinMat.emissiveIntensity = 0
     }
     const moving = speed > 0.35
     const carryT = maxCarry > 0 ? itemsCarried / maxCarry : 0

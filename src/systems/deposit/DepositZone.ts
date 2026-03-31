@@ -7,4 +7,4 @@ export type DepositZone = {
 }
 
 /** Must match overlap test in DepositSystem and ring scale in SceneSetup */
-export const DEFAULT_DEPOSIT_ZONE_RADIUS = 2.05
+export const DEFAULT_DEPOSIT_ZONE_RADIUS = 1.28

@@ -21,7 +21,6 @@ type CollectAnim = { mesh: Object3D; t: number }
 
 /**
  * Owns world pickups: logical `GameItem` + Three.js mesh.
- * Data lives on `item`; motion is visual-only on the mesh.
  */
 export class ItemWorld {
   private readonly byId = new Map<string, Entry>()
@@ -39,10 +38,7 @@ export class ItemWorld {
     const mesh = createPickupMesh(item)
     const y = mesh.position.y
     mesh.position.set(x, y, z)
-    attachPickupIdleMotion(
-      mesh,
-      item.type === 'letter' ? 'letterPellet' : 'pellet',
-    )
+    attachPickupIdleMotion(mesh, 'wisp')
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
   }
@@ -55,16 +51,6 @@ export class ItemWorld {
     this.byId.delete(id)
   }
 
-  /** Clear all world pickups (e.g. when switching spawn mode) */
-  clearAllPickups(): void {
-    for (const id of [...this.byId.keys()]) {
-      this.remove(id)
-    }
-  }
-
-  /**
-   * After a successful stack push: remove from pickup sim, keep mesh for a short pop, then dispose.
-   */
   applyMagnetPull(
     playerXZ: Vector3,
     collectRadius: number,
@@ -106,7 +92,6 @@ export class ItemWorld {
       const a = this.collectAnims[i]
       a.t += dt
       const p = Math.min(1, a.t / COLLECT_POP_SEC)
-      // Punch up then shrink (juice)
       let s: number
       if (p < 0.45) {
         s = 1 + 0.38 * Math.sin((p / 0.45) * (Math.PI / 2))
@@ -121,13 +106,28 @@ export class ItemWorld {
     }
   }
 
-  /** Current number of pickups in the world (for spawn throttling) */
   getPickupCount(): number {
     return this.byId.size
   }
 
+  /** World wisps only (not carried). */
+  countWisps(): number {
+    let n = 0
+    for (const [, { item }] of this.byId) {
+      if (item.type === 'wisp') n += 1
+    }
+    return n
+  }
+
   hasPickup(id: string): boolean {
     return this.byId.has(id)
+  }
+
+  /** Pickup root position in world (pickup group assumed at scene origin). */
+  getPickupXZ(id: string): { x: number; z: number } | null {
+    const e = this.byId.get(id)
+    if (!e) return null
+    return { x: e.mesh.position.x, z: e.mesh.position.z }
   }
 
   entries(): IterableIterator<[string, Entry]> {
@@ -137,19 +137,46 @@ export class ItemWorld {
   updateVisuals(timeSec: number, dt: number): void {
     for (const [, { mesh, item }] of this.byId) {
       updatePickupIdleMotion(mesh, timeSec, dt)
-      if (item.type === 'powerPellet') {
-        const body = mesh.userData.powerPelletBody as Mesh | undefined
-        const halo = mesh.userData.powerPelletHalo as Mesh | undefined
+      if (item.type === 'wisp') {
+        const body = mesh.userData.wispBody as Mesh | undefined
+        const mid = mesh.userData.wispMid as Mesh | undefined
+        const halo = mesh.userData.wispHalo as Mesh | undefined
+        const h = item.hue * 20
         if (body) {
-          const pulse = 0.94 + 0.06 * Math.sin(timeSec * 5.6)
+          const pulse = 0.95 + 0.05 * Math.sin(timeSec * 3.8 + h)
           body.scale.setScalar(pulse)
         }
+        if (mid) {
+          const mp = 0.97 + 0.03 * Math.sin(timeSec * 3.2 + h * 0.5)
+          mid.scale.setScalar(mp)
+          const mm = mid.material
+          if (mm && !Array.isArray(mm) && 'emissiveIntensity' in mm) {
+            mm.emissiveIntensity = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(timeSec * 4.4))
+          }
+        }
         if (halo) {
-          const hp = 0.97 + 0.08 * Math.sin(timeSec * 4.15 + 0.9)
+          const hp = 0.92 + 0.08 * Math.sin(timeSec * 2.7 + 0.7)
           halo.scale.setScalar(hp)
           const hm = halo.material
           if (hm && !Array.isArray(hm) && 'emissiveIntensity' in hm) {
-            hm.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(timeSec * 6.1))
+            hm.emissiveIntensity = 0.42 + 0.22 * (0.5 + 0.5 * Math.sin(timeSec * 4.9))
+          }
+        }
+      } else if (item.type === 'relic') {
+        const gem = mesh.userData.relicGem as Mesh | undefined
+        const rHalo = mesh.userData.relicHalo as Mesh | undefined
+        const h = item.hue * 30
+        if (gem) {
+          gem.rotation.y += dt * 1.1
+          const pulse = 0.94 + 0.06 * Math.sin(timeSec * 4.2 + h)
+          gem.scale.setScalar(pulse)
+        }
+        if (rHalo) {
+          const hp = 0.88 + 0.12 * Math.sin(timeSec * 3.1)
+          rHalo.scale.setScalar(hp)
+          const hm = rHalo.material
+          if (hm && !Array.isArray(hm) && 'emissiveIntensity' in hm) {
+            hm.emissiveIntensity = 0.5 + 0.35 * (0.5 + 0.5 * Math.sin(timeSec * 5.2))
           }
         }
       }

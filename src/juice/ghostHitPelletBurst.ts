@@ -28,15 +28,12 @@ function createBurstFleckMesh(item: GameItem): Mesh {
   const geo = new SphereGeometry(r, 12, 10)
   let color = new Color(0xff9a1a)
   let emissive = new Color(0xff6600)
-  if (item.type === 'crystal') {
-    color = new Color().setHSL(item.hue, 0.85, 0.54)
+  if (item.type === 'wisp') {
+    color = new Color().setHSL(item.hue, 0.75, 0.56)
     emissive = color.clone()
-  } else if (item.type === 'letter') {
-    color = new Color(0xffb020)
-    emissive = new Color(0xff7700)
-  } else if (item.type === 'powerPellet') {
-    color = new Color(0x8b62ff)
-    emissive = new Color(0xc4a8ff)
+  } else if (item.type === 'relic') {
+    color = new Color().setHSL(item.hue, 0.8, 0.55)
+    emissive = new Color().setHSL(item.hue + 0.03, 0.9, 0.5)
   }
   const mat = new MeshStandardMaterial({
     color,

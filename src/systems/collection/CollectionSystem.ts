@@ -1,5 +1,4 @@
 import { Vector3 } from 'three'
-import type { GameItem } from '../../core/types/GameItem.ts'
 import type { CarryStack } from '../stack/CarryStack.ts'
 import type { ItemWorld } from '../items/ItemWorld.ts'
 import type { PlayerController } from '../player/PlayerController.ts'
@@ -12,8 +11,6 @@ import {
 const p = new Vector3()
 
 export type CollectionCallbacks = {
-  /** Power pellets are consumed instantly (not stacked). */
-  onPowerPelletCollected?: (item: Extract<GameItem, { type: 'powerPellet' }>) => void
   /** When true (e.g. ghost hit i-frames), magnet + pickup are skipped. */
   pickupBlocked?: boolean
 }
@@ -46,12 +43,6 @@ export class CollectionSystem {
       const dx = p.x - mesh.position.x
       const dz = p.z - mesh.position.z
       if (dx * dx + dz * dz > r2) continue
-
-      if (item.type === 'powerPellet') {
-        callbacks?.onPowerPelletCollected?.(item)
-        itemWorld.detachPickupForCollect(id)
-        continue
-      }
 
       if (stack.push(item)) {
         itemWorld.detachPickupForCollect(id)

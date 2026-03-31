@@ -6,7 +6,7 @@ export type JuiceSoundId =
   | 'money_tick'
   | 'overload_impact'
   | 'ghost_hit'
-  | 'power_pellet'
+  | 'ghost_pulse'
   | 'ghost_eat'
 
 export function playJuiceSound(_id: JuiceSoundId): void {

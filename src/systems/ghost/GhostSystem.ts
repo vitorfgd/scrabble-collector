@@ -1,7 +1,16 @@
 import type { Group } from 'three'
-import { Color, Mesh, MeshStandardMaterial, Vector3 } from 'three'
+import {
+  Color,
+  Mesh,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  Vector3,
+} from 'three'
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
+import type { GhostGltfTemplate } from './ghostGltfAsset.ts'
 import { createGhostVisual } from './createGhostVisual.ts'
+import { MANSION_WORLD_HALF } from '../world/mansionGeometry.ts'
+import type { WorldCollision } from '../world/WorldCollision.ts'
 import {
   DEFAULT_GHOST_SPAWNS,
   GHOST_CHASE_SPEED,
@@ -11,10 +20,10 @@ import {
   GHOST_DIRECTION_SMOOTH_CHASE,
   GHOST_DIRECTION_SMOOTH_FRIGHT,
   GHOST_DIRECTION_SMOOTH_WANDER,
+  GHOST_FACING_TURN_DEFAULT,
+  GHOST_FACING_TURN_FRIGHT,
   GHOST_FRIGHT_SPEED,
   GHOST_LOSE_CHASE_RADIUS,
-  GHOST_MAP_HALF_X,
-  GHOST_MAP_HALF_Z,
   GHOST_MELEE_REARM_PADDING,
   GHOST_POST_HIT_CHASE_LOCKOUT_SEC,
   GHOST_POST_HIT_DISENGAGE_SPEED,
@@ -43,10 +52,12 @@ export class GhostSystem {
 
   constructor(
     ghostGroup: Group,
+    worldCollision: WorldCollision,
     spawns: readonly GhostSpawnSpec[] = DEFAULT_GHOST_SPAWNS,
+    ghostGltf: GhostGltfTemplate | null = null,
   ) {
     for (const s of spawns) {
-      this.ghosts.push(new Ghost(ghostGroup, s))
+      this.ghosts.push(new Ghost(ghostGroup, worldCollision, s, ghostGltf))
     }
   }
 
@@ -72,6 +83,7 @@ export class GhostSystem {
       )
       g.updateVulnerableAppearance(this.powerModeActive, this.powerModeTimeSec)
     }
+    this.separateOverlappingGhosts()
   }
 
   /**
@@ -168,6 +180,32 @@ export class GhostSystem {
     }
     this.ghosts.length = 0
   }
+
+  /** Push ghost centers apart so multiple chasers do not stack on the player. */
+  private separateOverlappingGhosts(): void {
+    const minD = GHOST_COLLISION_RADIUS * 2.25
+    const list = this.ghosts.filter((g) => !g.isEaten())
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i]!
+        const b = list[j]!
+        let dx = b.root.position.x - a.root.position.x
+        let dz = b.root.position.z - a.root.position.z
+        let dist = Math.hypot(dx, dz)
+        if (dist >= minD || dist < 1e-7) continue
+        dx /= dist
+        dz /= dist
+        const push = (minD - dist) * 0.52
+        a.root.position.x -= dx * push
+        a.root.position.z -= dz * push
+        b.root.position.x += dx * push
+        b.root.position.z += dz * push
+      }
+    }
+    for (const g of list) {
+      g.resolveAgainstWalls()
+    }
+  }
 }
 
 type SkinSnap = {
@@ -178,6 +216,7 @@ type SkinSnap = {
 
 class Ghost {
   readonly root: Group
+  private readonly worldCollision: WorldCollision
   private readonly velocity = new Vector3()
   private readonly scratch = new Vector3()
   private readonly spawnX: number
@@ -199,11 +238,14 @@ class Ghost {
 
   constructor(
     ghostGroup: Group,
+    worldCollision: WorldCollision,
     spec: GhostSpawnSpec,
+    ghostGltf: GhostGltfTemplate | null,
   ) {
+    this.worldCollision = worldCollision
     this.spawnX = spec.x
     this.spawnZ = spec.z
-    this.root = createGhostVisual(spec.color)
+    this.root = createGhostVisual(spec.color, ghostGltf)
     this.root.position.set(spec.x, 0, spec.z)
     ghostGroup.add(this.root)
     this.pickWanderTimer()
@@ -211,18 +253,21 @@ class Ghost {
     this.materials = []
     this.skinSnap = []
     this.root.traverse((o) => {
-      if (
-        o instanceof Mesh &&
-        o.userData.isGhostBody === true &&
-        o.material instanceof MeshStandardMaterial
-      ) {
-        const m = o.material
-        this.materials.push(m)
-        this.skinSnap.push({
-          color: m.color.clone(),
-          emissive: m.emissive.clone(),
-          emissiveIntensity: m.emissiveIntensity,
-        })
+      if (!(o instanceof Mesh) || o.userData.isGhostBody !== true) return
+      const mat = o.material
+      const mats = Array.isArray(mat) ? mat : [mat]
+      for (const m of mats) {
+        if (
+          m instanceof MeshStandardMaterial ||
+          m instanceof MeshPhysicalMaterial
+        ) {
+          this.materials.push(m)
+          this.skinSnap.push({
+            color: m.color.clone(),
+            emissive: m.emissive.clone(),
+            emissiveIntensity: m.emissiveIntensity,
+          })
+        }
       }
     })
   }
@@ -262,7 +307,7 @@ class Ghost {
     this.wanderAngle = Math.atan2(az, ax)
     this.root.position.x += ax * GHOST_POST_HIT_SEPARATION
     this.root.position.z += az * GHOST_POST_HIT_SEPARATION
-    this.clampToMap()
+    this.resolveWallCollision()
     this.velocity.x += ax * GHOST_POST_HIT_DISENGAGE_SPEED
     this.velocity.z += az * GHOST_POST_HIT_DISENGAGE_SPEED
     const hs = Math.hypot(this.velocity.x, this.velocity.z)
@@ -451,26 +496,39 @@ class Ghost {
     this.scratch.set(this.velocity.x * dt, 0, this.velocity.z * dt)
     this.root.position.add(this.scratch)
 
-    this.clampToMap()
+    this.resolveWallCollision()
 
-    const hs = Math.hypot(this.velocity.x, this.velocity.z)
-    if (hs > 0.12) {
-      /** Face +Z local toward movement (eyes at +Z); matches `PlayerController` facing convention */
-      this.root.rotation.y = Math.atan2(this.velocity.x, this.velocity.z)
+    /**
+     * Face toward smoothed intent (not raw velocity). Wall resolution only moves position;
+     * velocity can oscillate along barriers while fleeing, which made `atan2(vx,vz)` spin.
+     */
+    const faceSl = Math.hypot(this.smoothedTx, this.smoothedTz)
+    if (faceSl > 0.06) {
+      const targetYaw = Math.atan2(this.smoothedTx, this.smoothedTz)
+      const cur = this.root.rotation.y
+      let delta = targetYaw - cur
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+      const turn =
+        frightened ? GHOST_FACING_TURN_FRIGHT : GHOST_FACING_TURN_DEFAULT
+      this.root.rotation.y = cur + delta * (1 - Math.exp(-turn * dt))
     }
 
+    const chaseAnim =
+      !frightened && !playerInDepositZone && this.state === 'chase'
     const anim = this.root.userData.updateGhostAnimation as
       | ((
           dt: number,
           timeSec: number,
           vx: number,
           vz: number,
+          chaseAnim?: boolean,
         ) => void)
       | undefined
-    anim?.(dt, timeSec, this.velocity.x, this.velocity.z)
+    anim?.(dt, timeSec, this.velocity.x, this.velocity.z, chaseAnim)
 
     this.applyEdgeNudge(targetSpeed)
     this.excludeFromDepositZone()
+    this.resolveWallCollision()
   }
 
   /** Deposit circle at world origin — ghosts cannot overlap the player drop zone. */
@@ -501,15 +559,19 @@ class Ghost {
     }
   }
 
-  private clampToMap(): void {
-    this.root.position.x = Math.max(
-      -GHOST_MAP_HALF_X,
-      Math.min(GHOST_MAP_HALF_X, this.root.position.x),
+  private resolveWallCollision(): void {
+    const r = this.worldCollision.resolveCircleXZ(
+      this.root.position.x,
+      this.root.position.z,
+      GHOST_COLLISION_RADIUS,
     )
-    this.root.position.z = Math.max(
-      -GHOST_MAP_HALF_Z,
-      Math.min(GHOST_MAP_HALF_Z, this.root.position.z),
-    )
+    this.root.position.x = r.x
+    this.root.position.z = r.z
+  }
+
+  /** After inter-ghost separation pushes — keep inside walkable area. */
+  resolveAgainstWalls(): void {
+    this.resolveWallCollision()
   }
 
   private applyEdgeNudge(moveSpeed: number): void {
@@ -518,10 +580,11 @@ class Ghost {
     const pz = this.root.position.z
     let nx = 0
     let nz = 0
-    if (px > GHOST_MAP_HALF_X - m) nx -= 1
-    if (px < -GHOST_MAP_HALF_X + m) nx += 1
-    if (pz > GHOST_MAP_HALF_Z - m) nz -= 1
-    if (pz < -GHOST_MAP_HALF_Z + m) nz += 1
+    const H = MANSION_WORLD_HALF
+    if (px > H - m) nx -= 1
+    if (px < -H + m) nx += 1
+    if (pz > H - m) nz -= 1
+    if (pz < -H + m) nz += 1
     if (nx !== 0 || nz !== 0) {
       const len = Math.hypot(nx, nz) || 1
       const push = moveSpeed * 0.35
@@ -531,6 +594,10 @@ class Ghost {
   }
 
   destroy(): void {
+    const disposeAnim = this.root.userData.disposeGhostAnim as
+      | (() => void)
+      | undefined
+    disposeAnim?.()
     this.root.position.set(0, 0, 0)
     this.root.traverse((o) => {
       if (o instanceof Mesh) {

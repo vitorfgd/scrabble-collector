@@ -1,27 +1,24 @@
 /**
  * Generic collectible payload. Core systems only rely on id / type / value;
- * theme-specific fields (hue, letter, …) are for visuals or future rules.
+ * theme-specific fields (hue, …) are for visuals or future rules.
  */
 export type ItemCore = {
   id: string
-  type: string
   value: number
 }
 
-export type GameItem =
-  | (ItemCore & {
-      kind: 'collectible'
-      type: 'crystal'
-      /** Theme-only color hint for Crystal Quarry visuals */
-      hue: number
-    })
-  | (ItemCore & {
-      kind: 'collectible'
-      type: 'letter'
-      /** Single A–Z character for tile display and future word rules */
-      letter: string
-    })
-  | (ItemCore & {
-      kind: 'collectible'
-      type: 'powerPellet'
-    })
+export type WispItem = ItemCore & {
+  kind: 'collectible'
+  type: 'wisp'
+  /** Color variation for glow / zone read */
+  hue: number
+}
+
+export type RelicItem = ItemCore & {
+  kind: 'collectible'
+  type: 'relic'
+  /** Gold tint (Three.js HSL hue) */
+  hue: number
+}
+
+export type GameItem = WispItem | RelicItem

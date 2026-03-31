@@ -1,9 +1,8 @@
 import type { GameItem } from '../../core/types/GameItem.ts'
 
 /**
- * Maps a deposited batch to a money amount. Swap implementations for:
- * - letter words / dictionary checks
- * - combo multipliers
+ * Maps a deposited batch to a money amount. Swap implementations for
+ * combo multipliers or custom rules without changing deposit flow.
  * without changing DepositSystem or CarryStack.
  */
 export type ItemValueResolver = (items: GameItem[]) => number

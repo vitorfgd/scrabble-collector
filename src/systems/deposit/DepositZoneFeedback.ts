@@ -19,16 +19,34 @@ export class DepositZoneFeedback {
   private burstTDur = BURST_SEC
   private readonly zonePlane: Mesh
   private readonly zoneRing: Mesh | null
+  private readonly underglow: Mesh | null
   private readonly baseScale: number
+  private readonly baseUnderglowEmissive: number
+  private readonly baseUnderglowOpacity: number
   private readonly burstRing: ThreeMesh
   private burstRingLife = 0
   private burstRingMaxLife = 0.4
   private burstRingStrong = false
 
-  constructor(zonePlane: Mesh, zoneRing: Mesh | null, depositRoot: Group) {
+  /** Smoothed 0–1 while player stands in deposit circle */
+  private presenceSmooth = 0
+  private presenceTarget = 0
+
+  constructor(
+    zonePlane: Mesh,
+    zoneRing: Mesh | null,
+    depositRoot: Group,
+    underglow: Mesh | null = null,
+  ) {
     this.zonePlane = zonePlane
     this.zoneRing = zoneRing
+    this.underglow = underglow
     this.baseScale = zonePlane.scale.x
+    const ugMat = underglow?.material
+    this.baseUnderglowEmissive =
+      ugMat instanceof MeshStandardMaterial ? ugMat.emissiveIntensity : 0.22
+    this.baseUnderglowOpacity =
+      ugMat instanceof MeshStandardMaterial ? ugMat.opacity : 0.58
 
     const ringMat = new MeshBasicMaterial({
       color: 0xffe8a0,
@@ -43,6 +61,11 @@ export class DepositZoneFeedback {
     this.burstRing.visible = false
     this.burstRing.scale.setScalar(0.15)
     depositRoot.add(this.burstRing)
+  }
+
+  /** Call each frame before `update` — deposit disc overlap (same test as gameplay). */
+  setPlayerInside(inside: boolean): void {
+    this.presenceTarget = inside ? 1 : 0
   }
 
   triggerItem(): void {
@@ -98,7 +121,11 @@ export class DepositZoneFeedback {
   }
 
   update(dt: number): void {
+    const occK = 1 - Math.exp(-7 * dt)
+    this.presenceSmooth += (this.presenceTarget - this.presenceSmooth) * occK
+
     const planeMat = this.zonePlane.material as MeshStandardMaterial
+    const occ = this.presenceSmooth
 
     if (this.burstRingLife > 0) {
       this.burstRingLife -= dt
@@ -127,10 +154,19 @@ export class DepositZoneFeedback {
     }
 
     if (this.flashT <= 0) {
-      planeMat.emissiveIntensity = BASE_PLANE_EMISSIVE
+      const emBoost = occ * 0.3
+      planeMat.emissiveIntensity = BASE_PLANE_EMISSIVE + emBoost
       if (this.zoneRing) {
         const ringMat = this.zoneRing.material as MeshStandardMaterial
-        ringMat.emissiveIntensity = BASE_RING_EMISSIVE
+        ringMat.emissiveIntensity = BASE_RING_EMISSIVE + emBoost * 0.85
+      }
+      if (this.underglow) {
+        const ug = this.underglow.material as MeshStandardMaterial
+        ug.emissiveIntensity = this.baseUnderglowEmissive + occ * 0.24
+        ug.opacity = Math.min(0.78, this.baseUnderglowOpacity + occ * 0.14)
+      }
+      if (this.burstT <= 0 && this.burstRingLife <= 0) {
+        this.zonePlane.scale.setScalar(this.baseScale * (1 + 0.065 * occ))
       }
       return
     }

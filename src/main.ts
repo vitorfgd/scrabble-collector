@@ -6,7 +6,7 @@ if (!host) {
   throw new Error('#game-viewport missing from index.html')
 }
 
-const game = mountGame(host)
+const game = await mountGame(host)
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => game.dispose())

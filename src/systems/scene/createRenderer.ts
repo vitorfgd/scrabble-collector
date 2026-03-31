@@ -14,12 +14,13 @@ export function createRenderer(host: HTMLElement): WebGLRenderer {
 
   renderer.outputColorSpace = SRGBColorSpace
   renderer.toneMapping = ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1
+  renderer.toneMappingExposure = 1.08
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = PCFShadowMap
 
   renderer.domElement.style.display = 'block'
-  host.appendChild(renderer.domElement)
+  /** Prepend so later HUD siblings paint above the canvas (appendChild hid HTML UI). */
+  host.prepend(renderer.domElement)
 
   return renderer
 }

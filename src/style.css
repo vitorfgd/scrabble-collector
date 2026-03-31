@@ -42,6 +42,8 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 0;
 }
 
 /* Ghost hit: quick full-frame flash (no pointer capture) */
@@ -66,7 +68,7 @@ body {
   transition: opacity 0.04s ease-in;
 }
 
-/* Power pellet mode — cool edge glow (readability + “charged” read) */
+/* Ghost pulse mode — visible but light gold wash (subtle, not overpowering) */
 .hud-power-tint {
   position: absolute;
   inset: 0;
@@ -74,29 +76,29 @@ body {
   pointer-events: none;
   opacity: 0;
   background: radial-gradient(
-    ellipse 85% 65% at 50% 38%,
-    rgba(120, 230, 255, 0.22) 0%,
-    rgba(40, 90, 160, 0.12) 45%,
-    transparent 72%
+    ellipse 88% 70% at 50% 38%,
+    rgba(255, 210, 130, 0.14) 0%,
+    rgba(130, 95, 45, 0.06) 48%,
+    transparent 78%
   );
-  box-shadow: inset 0 0 42px rgba(100, 220, 255, 0.35);
+  box-shadow: inset 0 0 36px rgba(255, 195, 95, 0.18);
   mix-blend-mode: screen;
-  transition: opacity 0.12s ease-out;
+  transition: opacity 0.14s ease-out;
 }
 
 .hud-power-tint.hud-power-tint--on {
-  opacity: 1;
-  transition: opacity 0.08s ease-in;
+  opacity: 0.62;
+  transition: opacity 0.1s ease-in;
   background: radial-gradient(
-    ellipse 88% 70% at 50% 36%,
-    rgba(130, 240, 255, 0.32) 0%,
-    rgba(50, 110, 200, 0.18) 48%,
-    rgba(10, 20, 45, 0.45) 100%
+    ellipse 90% 74% at 50% 36%,
+    rgba(255, 225, 160, 0.32) 0%,
+    rgba(200, 150, 65, 0.14) 46%,
+    rgba(35, 26, 12, 0.22) 100%
   );
-  box-shadow: inset 0 0 52px rgba(90, 210, 255, 0.42);
+  box-shadow: inset 0 0 56px rgba(255, 200, 95, 0.32);
 }
 
-/* Power seconds left — minimal, no heavy UI */
+/* Pulse phase: bar drains during pulse, fills toward next pulse while idle */
 .hud-power-timer {
   position: absolute;
   top: env(safe-area-inset-top, 0);
@@ -104,19 +106,47 @@ body {
   transform: translateX(-50%);
   z-index: 9;
   margin-top: 10px;
-  padding: 4px 14px;
-  border-radius: 999px;
-  font: 800 clamp(18px, 5vw, 26px) system-ui, sans-serif;
-  letter-spacing: 0.06em;
-  color: rgba(220, 250, 255, 0.95);
-  text-shadow: 0 0 12px rgba(80, 200, 255, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5);
-  background: rgba(12, 40, 72, 0.42);
-  border: 1px solid rgba(130, 220, 255, 0.35);
+  width: min(72vw, 280px);
   pointer-events: none;
 }
 
 .hud-power-timer.hidden {
   display: none;
+}
+
+.hud-power-timer__track {
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(24, 20, 32, 0.72);
+  border: 1px solid rgba(120, 100, 140, 0.35);
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.hud-power-timer__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(140, 175, 210, 0.85),
+    rgba(200, 215, 235, 0.95)
+  );
+  box-shadow: 0 0 12px rgba(160, 190, 230, 0.35);
+}
+
+.hud-power-timer:not(.hud-power-timer--idle) .hud-power-timer__track {
+  border-color: rgba(230, 180, 95, 0.45);
+  background: rgba(36, 28, 14, 0.65);
+}
+
+.hud-power-timer:not(.hud-power-timer--idle) .hud-power-timer__fill {
+  background: linear-gradient(
+    90deg,
+    rgba(220, 150, 55, 0.95),
+    rgba(255, 220, 140, 1)
+  );
+  box-shadow: 0 0 14px rgba(255, 200, 90, 0.5);
 }
 
 /* Ghost hit i-frames — subtle frame cue (with shirt blink on character) */
@@ -137,45 +167,6 @@ body {
   }
   to {
     opacity: 0.72;
-  }
-}
-
-.hud-bootstrap {
-  position: absolute;
-  top: 28%;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6;
-  padding: 8px 18px;
-  border-radius: 999px;
-  font: 800 clamp(16px, 4.5vw, 22px) system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  color: #fff;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
-  background: rgba(255, 120, 60, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  pointer-events: none;
-  animation: bootstrapPop 0.55s ease-out;
-  transition: opacity 0.35s ease-out;
-}
-
-.hud-bootstrap.hidden {
-  display: none;
-}
-
-.hud-bootstrap.hud-bootstrap--out {
-  opacity: 0;
-  pointer-events: none;
-}
-
-@keyframes bootstrapPop {
-  0% {
-    transform: translateX(-50%) scale(0.75);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(-50%) scale(1);
-    opacity: 1;
   }
 }
 
@@ -263,82 +254,119 @@ body {
     0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
-/* Chase Word target (letter mode) — separate from held letters below */
-.hud-chase {
+/* Upgrade pad: bottom sheet (thumb zone), tap to buy */
+.hud-upgrade {
   position: absolute;
-  top: 6px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 4;
-  width: min(96%, 340px);
-  padding: 6px 12px 8px;
-  border-radius: 12px;
-  background: linear-gradient(
-    180deg,
-    rgba(20, 24, 40, 0.72),
-    rgba(12, 14, 22, 0.55)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  width: min(96%, 428px);
   pointer-events: none;
-  text-align: center;
 }
 
-.hud-chase.hidden {
+.hud-upgrade:not(.hidden) {
+  pointer-events: auto;
+}
+
+.hud-upgrade.hidden {
   display: none;
 }
 
-.hud-chase-row {
+.hud-upgrade__card {
+  --upgrade-accent: #c9a882;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(
+    165deg,
+    rgba(22, 14, 28, 0.97) 0%,
+    rgba(14, 10, 20, 0.98) 100%
+  );
+  border: 1px solid rgba(180, 140, 110, 0.28);
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 220, 180, 0.06);
   display: flex;
-  align-items: baseline;
-  justify-content: center;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.hud-chase-tag {
-  font: 700 11px system-ui, sans-serif;
-  letter-spacing: 0.14em;
-  color: rgba(255, 220, 160, 0.95);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+.hud-upgrade__title {
+  margin: 0;
+  font: 800 clamp(1.45rem, 5.4vw, 1.95rem) system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #e8ddd0;
+  text-align: center;
+  line-height: 1.12;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
 }
 
-.hud-chase-target {
-  font: 900 clamp(20px, 6vw, 30px) system-ui, sans-serif;
-  letter-spacing: 0.22em;
-  color: #fff;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+.hud-upgrade__bar-wrap {
+  height: clamp(14px, 3.8vw, 18px);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  border: 1px solid rgba(120, 80, 90, 0.35);
 }
 
-.hud-chase-progress {
-  margin-top: 4px;
-  font: 700 clamp(13px, 3.8vw, 17px) ui-monospace, monospace;
-  letter-spacing: 0.12em;
-  color: rgba(180, 255, 220, 0.92);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+.hud-upgrade__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--upgrade-accent) 85%, #1a1018),
+    var(--upgrade-accent)
+  );
+  box-shadow: 0 0 16px color-mix(in srgb, var(--upgrade-accent) 45%, transparent);
+  transition: width 0.18s ease-out;
 }
 
-.hud-chase-progress .chase-gap {
-  color: rgba(255, 220, 140, 0.95);
-  font-weight: 800;
-  text-shadow: 0 0 12px rgba(255, 200, 100, 0.45);
+.hud-upgrade__btn {
+  width: 100%;
+  margin: 0;
+  padding: 14px 12px;
+  min-height: 54px;
+  border-radius: 14px;
+  border: 2px solid rgba(60, 40, 50, 0.9);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--upgrade-accent) 92%, #fff) 0%,
+    var(--upgrade-accent) 100%
+  );
+  color: #140c10;
+  font: 800 clamp(1.12rem, 4.2vw, 1.4rem) system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 240, 220, 0.25);
+  transition:
+    transform 0.08s ease,
+    filter 0.1s ease,
+    opacity 0.12s ease;
 }
 
-.hud-chase--close .hud-chase-target {
-  animation: chaseTargetPulse 1.1s ease-in-out infinite;
+.hud-upgrade__btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(1.06);
 }
 
-@keyframes chaseTargetPulse {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.12);
-  }
+.hud-upgrade__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
-/* Bottom bar: held letters (center) + carry/money + mode hint — clear of chase UI at top */
+.hud-upgrade__btn:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 2px;
+}
+
+/* Bottom bar: carry / money / short hint */
 .hud-bottom {
   position: absolute;
   left: 12px;
@@ -352,21 +380,6 @@ body {
   width: calc(100% - 24px);
   max-width: 100%;
   pointer-events: none;
-}
-
-#hud-letters {
-  position: relative;
-  width: 100%;
-  max-width: 96%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-  font: 800 clamp(18px, 5.5vw, 28px) system-ui, sans-serif;
-  letter-spacing: 0.14em;
-  color: #fff;
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
-  min-height: 1.2em;
 }
 
 #hud-row {
@@ -520,13 +533,6 @@ body {
     0 3px 14px rgba(0, 0, 0, 0.5);
 }
 
-#hud-deposit-toast .deposit-word {
-  font: 800 clamp(16px, 4.5vw, 24px) system-ui, sans-serif;
-  letter-spacing: 0.14em;
-  color: #fff;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
-}
-
 #hud-deposit-toast .deposit-hint {
   font: 600 12px system-ui, sans-serif;
   line-height: 1.35;
@@ -554,93 +560,6 @@ body {
 
 #hud-deposit-toast.hidden {
   visibility: hidden;
-}
-
-.chase-toast {
-  position: absolute;
-  top: 28%;
-  left: 50%;
-  transform: translateX(-50%) scale(0.92);
-  z-index: 5;
-  min-width: min(88%, 280px);
-  padding: 14px 18px 16px;
-  border-radius: 14px;
-  text-align: center;
-  pointer-events: none;
-  background: linear-gradient(
-    165deg,
-    rgba(255, 200, 80, 0.95),
-    rgba(200, 90, 40, 0.92)
-  );
-  border: 2px solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(255, 220, 120, 0.35);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease-out, transform 0.2s cubic-bezier(0.2, 0.9, 0.25, 1);
-}
-
-.chase-toast.visible {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) scale(1);
-  animation: chaseToastPop 0.55s ease-out;
-}
-
-.chase-toast--celebrate.visible {
-  box-shadow:
-    0 0 0 4px rgba(255, 240, 180, 0.45),
-    0 12px 40px rgba(0, 0, 0, 0.35);
-  animation: chaseToastPop 0.65s ease-out, chaseToastGlow 0.85s ease-out;
-}
-
-@keyframes chaseToastGlow {
-  0% {
-    filter: brightness(1.15) saturate(1.1);
-  }
-  100% {
-    filter: brightness(1) saturate(1);
-  }
-}
-
-.chase-toast.hidden {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.chase-toast-title {
-  font: 800 13px system-ui, sans-serif;
-  letter-spacing: 0.12em;
-  color: rgba(20, 12, 8, 0.9);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-
-.chase-toast-word {
-  margin-top: 6px;
-  font: 900 clamp(22px, 7vw, 34px) system-ui, sans-serif;
-  letter-spacing: 0.14em;
-  color: #1a0a06;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-.chase-toast-bonus {
-  margin-top: 4px;
-  font: 800 clamp(16px, 4.5vw, 22px) system-ui, sans-serif;
-  color: #0a1f0a;
-}
-
-@keyframes chaseToastPop {
-  0% {
-    transform: translateX(-50%) scale(0.75);
-    filter: brightness(1.3);
-  }
-  55% {
-    transform: translateX(-50%) scale(1.04);
-    filter: brightness(1.1);
-  }
-  100% {
-    transform: translateX(-50%) scale(1);
-    filter: brightness(1);
-  }
 }
 
 #hud-money.money-bump {

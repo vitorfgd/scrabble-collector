@@ -3,6 +3,7 @@
  */
 
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
+import { roomCenter } from '../world/mansionRoomData.ts'
 
 export {
   GHOST_CHASE_SPEED,
@@ -33,13 +34,13 @@ export const GHOST_DIRECTION_SMOOTH_WANDER = 4.2
 export const GHOST_DIRECTION_SMOOTH_CHASE = 10.5
 export const GHOST_DIRECTION_SMOOTH_FRIGHT = 4.8
 
+/** Yaw lerp (rad/s scale in exp) — face smoothed intent, not raw velocity (avoids spin on wall slides). */
+export const GHOST_FACING_TURN_DEFAULT = 15
+export const GHOST_FACING_TURN_FRIGHT = 10
+
 /** Seconds between new random wander headings (calmer = longer) */
 export const GHOST_WANDER_TURN_MIN = 1.05
 export const GHOST_WANDER_TURN_MAX = 2.85
-
-/** World bounds (XZ); ghost centers are clamped inside the playfield */
-export const GHOST_MAP_HALF_X = 18.5
-export const GHOST_MAP_HALF_Z = 18.5
 
 export type GhostSpawnSpec = {
   x: number
@@ -48,18 +49,37 @@ export type GhostSpawnSpec = {
   color: number
 }
 
-/** Three ghosts: red, pink, cyan — spread for readability, away from center deposit */
+const nw = roomCenter('NORTHWEST')
+const ne = roomCenter('NORTHEAST')
+const se = roomCenter('SOUTHEAST')
+const n = roomCenter('NORTH')
+const s = roomCenter('SOUTH')
+const w = roomCenter('WEST')
+
+/** Six ghosts: normal rooms only (never `SAFE_CENTER`). */
 export const DEFAULT_GHOST_SPAWNS: readonly GhostSpawnSpec[] = [
-  { x: -11.2, z: 9.5, color: 0xff3355 },
-  { x: 11.2, z: 9.5, color: 0xff5eb5 },
-  { x: 0, z: -11.5, color: 0x22e8ff },
+  { x: nw.x - 0.35, z: nw.z + 0.35, color: 0xff3355 },
+  { x: ne.x + 0.35, z: ne.z + 0.35, color: 0xff5eb5 },
+  { x: se.x + 0.35, z: se.z - 0.35, color: 0x22e8ff },
+  { x: n.x + 0.4, z: n.z - 0.5, color: 0xffaa33 },
+  { x: s.x - 0.35, z: s.z + 0.45, color: 0x88ee66 },
+  { x: w.x + 0.5, z: w.z - 0.4, color: 0xcc88ff },
 ]
 
 /**
  * Uniform mesh scale (same idea as `version3` `ENEMY_GHOST_VISUAL_SCALE` ~0.98).
  * Slightly above 1 so they read well next to the player.
  */
-export const GHOST_VISUAL_SCALE = 1.06
+export const GHOST_VISUAL_SCALE = 1.02
+
+/** Served from `public/` (Vite). */
+export const GHOST_GLTF_URL = '/assets/enemies/ghost.glb'
+
+/** GLB root Y offset so feet sit on the floor. */
+export const GHOST_GLB_Y_OFFSET = 0
+
+/** Extra Y rotation if model forward ≠ world +Z (movement uses atan2(vx, vz)). */
+export const GHOST_GLB_YAW_OFFSET = 0
 
 // --- Player hit (ghost touch) — tension without full reset ---
 

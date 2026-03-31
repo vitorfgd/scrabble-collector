@@ -4,7 +4,7 @@
  * All values: world units/sec (XZ).
  */
 
-/** Default max horizontal speed at full stick (before upgrades & power pellet mult). */
+/** Default max horizontal speed at full stick (before upgrades & pulse mult). */
 export const PLAYER_BASE_MAX_SPEED = 10.5
 
 /**

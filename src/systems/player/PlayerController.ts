@@ -2,18 +2,17 @@ import type { Group } from 'three'
 import { Vector3 } from 'three'
 import type { JoystickVector } from '../input/TouchJoystick.ts'
 import {
-  GHOST_MAP_HALF_X,
-  GHOST_MAP_HALF_Z,
   GHOST_HIT_KNOCKBACK_DECAY,
   GHOST_HIT_KNOCKBACK_SPEED,
 } from '../ghost/ghostConfig.ts'
+import type { WorldCollision } from '../world/WorldCollision.ts'
 import {
   PLAYER_BASE_MAX_SPEED,
   PLAYER_START_BOOST_DURATION_SEC,
   PLAYER_START_BOOST_MULT,
 } from '../gameplaySpeed.ts'
 
-/** Base max speed (before upgrades & power pellet); see `gameplaySpeed.ts` */
+/** Base max speed (before upgrades & ghost pulse); see `gameplaySpeed.ts` */
 export { PLAYER_BASE_MAX_SPEED as DEFAULT_PLAYER_MOVE_SPEED } from '../gameplaySpeed.ts'
 
 export class PlayerController {
@@ -26,6 +25,7 @@ export class PlayerController {
   /** Horizontal radius for overlap tests (XZ) */
   readonly radius = 0.55
   private readonly playerRoot: Group
+  private readonly worldCollision: WorldCollision
   private maxSpeed: number
   private readonly drag: number
   private targetYaw = 0
@@ -36,10 +36,12 @@ export class PlayerController {
 
   constructor(
     playerRoot: Group,
+    worldCollision: WorldCollision,
     maxSpeed = PLAYER_BASE_MAX_SPEED,
     drag = 12,
   ) {
     this.playerRoot = playerRoot
+    this.worldCollision = worldCollision
     this.maxSpeed = maxSpeed
     this.drag = drag
   }
@@ -56,7 +58,7 @@ export class PlayerController {
     return this.maxSpeed
   }
 
-  /** 1 = normal; >1 during power pellet mode */
+  /** 1 = normal; >1 during automatic ghost pulse */
   setPowerSpeedMultiplier(m: number): void {
     this.powerSpeedMul = Math.max(1, m)
   }
@@ -140,14 +142,13 @@ export class PlayerController {
     this.playerRoot.position.x += mx * dt
     this.playerRoot.position.z += mz * dt
 
-    this.playerRoot.position.x = Math.max(
-      -GHOST_MAP_HALF_X,
-      Math.min(GHOST_MAP_HALF_X, this.playerRoot.position.x),
+    const resolved = this.worldCollision.resolveCircleXZ(
+      this.playerRoot.position.x,
+      this.playerRoot.position.z,
+      this.radius,
     )
-    this.playerRoot.position.z = Math.max(
-      -GHOST_MAP_HALF_Z,
-      Math.min(GHOST_MAP_HALF_Z, this.playerRoot.position.z),
-    )
+    this.playerRoot.position.x = resolved.x
+    this.playerRoot.position.z = resolved.z
 
     const ax = input.x
     const az = input.y

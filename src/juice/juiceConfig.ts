@@ -35,8 +35,5 @@ export const MONEY_DISPLAY_LERP = 10
 export const IDLE_HINT_AFTER_SEC = 2.75
 export const IDLE_SPEED_MAX = 0.18
 
-/** Bootstrap floating hint */
-export const BOOTSTRAP_HINT_MS = 3200
-
 /** Floating +1 / money pop */
 export const FLOAT_TEXT_SEC = 0.85

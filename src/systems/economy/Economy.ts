@@ -4,7 +4,7 @@ import { defaultResolveItemValue } from './resolveItemValue.ts'
 
 /**
  * Holds balance and applies payouts from deposited `GameItem[]`.
- * Pass a custom `resolveValue` for letter words / multipliers without changing DepositSystem.
+ * Pass a custom `resolveValue` for multipliers or alternate payout rules.
  */
 export class Economy {
   money = 0
@@ -27,7 +27,7 @@ export class Economy {
     return add
   }
 
-  /** Direct credit grant (e.g. after explicit word evaluation) */
+  /** Direct credit grant (bonuses, quest rewards, etc.) */
   addMoney(amount: number): void {
     if (amount <= 0) return
     this.money += amount
