@@ -133,6 +133,11 @@ export class UpgradeZoneSystem {
     return ghostPulseDurationForLevels(this.pulseDurationLevel, interval)
   }
 
+  /** True after `update()` if the player is inside any upgrade pad radius. */
+  isPlayerInsideAnyPadZone(): boolean {
+    return this.activeKind !== null
+  }
+
   /** Call after `update()` each frame. */
   getHudSnapshot(): UpgradeHudSnapshot {
     if (!this.activeKind) return { visible: false }

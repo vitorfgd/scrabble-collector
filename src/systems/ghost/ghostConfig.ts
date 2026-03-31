@@ -54,23 +54,21 @@ const ne = roomCenter('NORTHEAST')
 const se = roomCenter('SOUTHEAST')
 const n = roomCenter('NORTH')
 const s = roomCenter('SOUTH')
-const w = roomCenter('WEST')
 
-/** Six ghosts: normal rooms only (never `SAFE_CENTER`). */
+/** Five ghosts: normal rooms only (never `SAFE_CENTER`). */
 export const DEFAULT_GHOST_SPAWNS: readonly GhostSpawnSpec[] = [
   { x: nw.x - 0.35, z: nw.z + 0.35, color: 0xff3355 },
   { x: ne.x + 0.35, z: ne.z + 0.35, color: 0xff5eb5 },
   { x: se.x + 0.35, z: se.z - 0.35, color: 0x22e8ff },
   { x: n.x + 0.4, z: n.z - 0.5, color: 0xffaa33 },
   { x: s.x - 0.35, z: s.z + 0.45, color: 0x88ee66 },
-  { x: w.x + 0.5, z: w.z - 0.4, color: 0xcc88ff },
 ]
 
 /**
  * Uniform mesh scale (same idea as `version3` `ENEMY_GHOST_VISUAL_SCALE` ~0.98).
  * Slightly above 1 so they read well next to the player.
  */
-export const GHOST_VISUAL_SCALE = 1.02
+export const GHOST_VISUAL_SCALE = 0.93
 
 /** Served from `public/` (Vite). */
 export const GHOST_GLTF_URL = '/assets/enemies/ghost.glb'
@@ -84,7 +82,7 @@ export const GHOST_GLB_YAW_OFFSET = 0
 // --- Player hit (ghost touch) — tension without full reset ---
 
 /** Ghost body radius for circle–circle test (~max lathe radius × `GHOST_VISUAL_SCALE`) */
-export const GHOST_COLLISION_RADIUS = 0.37
+export const GHOST_COLLISION_RADIUS = 0.345
 
 /**
  * Extra clearance beyond deposit disc + ghost body so ghosts do not skim the drop zone edge.

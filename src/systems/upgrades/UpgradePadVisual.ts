@@ -119,8 +119,8 @@ export function createUpgradePad(
   root.add(aura)
 
   const canvas = document.createElement('canvas')
-  canvas.width = 560
-  canvas.height = 108
+  canvas.width = 600
+  canvas.height = 124
   const ctx = canvas.getContext('2d')
   if (!ctx) {
     throw new Error('2D canvas not available')
@@ -153,9 +153,9 @@ export function createUpgradePad(
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = '#ede4dc'
-    ctx.font = '800 36px system-ui, Segoe UI, sans-serif'
+    ctx.font = '800 44px system-ui, Segoe UI, sans-serif'
     ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
-    ctx.shadowBlur = 4
+    ctx.shadowBlur = 6
     ctx.fillText(p.title, w / 2 + 6, h / 2)
     ctx.shadowBlur = 0
   }
@@ -170,8 +170,8 @@ export function createUpgradePad(
       depthWrite: false,
     }),
   )
-  sprite.position.y = 1.78
-  sprite.scale.set(3.05, 0.62, 1)
+  sprite.position.y = 2.5
+  sprite.scale.set(3.45, 0.72, 1)
   root.add(sprite)
 
   const baseInnerY = inner.position.y

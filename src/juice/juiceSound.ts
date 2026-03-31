@@ -8,6 +8,8 @@ export type JuiceSoundId =
   | 'ghost_hit'
   | 'ghost_pulse'
   | 'ghost_eat'
+  | 'relic_spawn'
+  | 'relic_collect'
 
 export function playJuiceSound(_id: JuiceSoundId): void {
   // Intentionally empty — swap for AudioBufferSource or asset pipeline.

@@ -67,7 +67,7 @@ export class GhostSystem {
     this.powerModeTimeSec = timeSec
   }
 
-  update(dt: number, playerPos: Vector3): void {
+  update(dt: number, playerPos: Vector3, playerCarryingRelic: boolean): void {
     this.ghostAnimTime += dt
     const frightened = this.powerModeActive
     const dr = DEFAULT_DEPOSIT_ZONE_RADIUS
@@ -80,6 +80,7 @@ export class GhostSystem {
         frightened,
         this.ghostAnimTime,
         playerInDepositZone,
+        playerCarryingRelic,
       )
       g.updateVulnerableAppearance(this.powerModeActive, this.powerModeTimeSec)
     }
@@ -358,6 +359,7 @@ class Ghost {
     frightened: boolean,
     timeSec: number,
     playerInDepositZone: boolean,
+    relicCarried: boolean,
   ): void {
     if (this.eaten) {
       this.respawnRemaining -= dt
@@ -403,7 +405,7 @@ class Ghost {
       tx = ax * inv
       tz = az * inv
       targetSpeed = GHOST_FRIGHT_SPEED
-    } else if (playerInDepositZone) {
+    } else if (playerInDepositZone && !relicCarried) {
       if (this.state === 'chase') {
         this.state = 'wander'
         this.pickWanderTimer()
@@ -417,6 +419,18 @@ class Ghost {
       tx = Math.cos(this.wanderAngle)
       tz = Math.sin(this.wanderAngle)
       targetSpeed = GHOST_WANDER_SPEED
+    } else if (relicCarried) {
+      this.state = 'chase'
+      if (dist > 1e-4) {
+        const inv = 1 / dist
+        tx = dx * inv
+        tz = dz * inv
+        targetSpeed = GHOST_CHASE_SPEED
+      } else {
+        tx = 0
+        tz = 0
+        targetSpeed = 0
+      }
     } else {
       const detectR2 = GHOST_DETECT_RADIUS * GHOST_DETECT_RADIUS
       const loseR2 = GHOST_LOSE_CHASE_RADIUS * GHOST_LOSE_CHASE_RADIUS
@@ -468,7 +482,10 @@ class Ghost {
     let dirSmooth = GHOST_DIRECTION_SMOOTH_WANDER
     if (frightened) {
       dirSmooth = GHOST_DIRECTION_SMOOTH_FRIGHT
-    } else if (this.state === 'chase' && !playerInDepositZone) {
+    } else if (
+      this.state === 'chase' &&
+      (relicCarried || !playerInDepositZone)
+    ) {
       dirSmooth = GHOST_DIRECTION_SMOOTH_CHASE
     }
     const dirK = 1 - Math.exp(-dirSmooth * dt)
@@ -486,7 +503,10 @@ class Ghost {
     let steerAccel = GHOST_STEERING_ACCEL_WANDER
     if (frightened) {
       steerAccel = GHOST_STEERING_ACCEL_FRIGHT
-    } else if (this.state === 'chase' && !playerInDepositZone) {
+    } else if (
+      this.state === 'chase' &&
+      (relicCarried || !playerInDepositZone)
+    ) {
       steerAccel = GHOST_STEERING_ACCEL_CHASE
     }
     const k = 1 - Math.exp(-steerAccel * dt)
@@ -513,8 +533,10 @@ class Ghost {
       this.root.rotation.y = cur + delta * (1 - Math.exp(-turn * dt))
     }
 
+    /** Run clip during pulse flee and during chase; idle only for calm wander. */
     const chaseAnim =
-      !frightened && !playerInDepositZone && this.state === 'chase'
+      frightened ||
+      (this.state === 'chase' && (relicCarried || !playerInDepositZone))
     const anim = this.root.userData.updateGhostAnimation as
       | ((
           dt: number,

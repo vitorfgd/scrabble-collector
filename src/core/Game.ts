@@ -60,9 +60,16 @@ import { playJuiceSound } from '../juice/juiceSound.ts'
 import {
   disposeAllGhostHitBursts,
   spawnGhostHitPelletBurst,
+  spawnRelicCollectBurst,
   updateGhostHitBursts,
   type GhostHitBurstParticle,
 } from '../juice/ghostHitPelletBurst.ts'
+import {
+  showRelicBankedCelebration,
+  showRelicPickupHint,
+  showRelicSpawnedBanner,
+  spawnRelicScreenSparkBurst,
+} from '../juice/relicHud.ts'
 import {
   computeGhostPulsePhase,
   GHOST_PULSE_SPEED_MULTIPLIER,
@@ -115,6 +122,12 @@ export class Game {
   private raf = 0
   private lastTime = performance.now()
   private elapsedSec = 0
+  /**
+   * Ghost pulse cycle time. Paused in deposit / upgrade zones; entering or leaving
+   * those zones resets to `safeDur` (empty idle bar, countdown restarts when you exit).
+   */
+  private ghostPulseClockSec = 0
+  private prevPulsePaused: boolean | null = null
   private hudSpawn: HTMLElement | null = null
   private readonly moneyHud: MoneyHud | null
   private readonly gameViewport: HTMLElement
@@ -222,6 +235,10 @@ export class Game {
       roomSystem: this.roomSystem,
       worldCollision: this.worldCollision,
       createRelic: () => createRelicItem(),
+      onSpawn: () => {
+        showRelicSpawnedBanner(this.gameViewport)
+        playJuiceSound('relic_spawn')
+      },
     })
     this.relicFootArrow = createSpecialRelicFootArrow()
     this.scene.add(this.relicFootArrow.root)
@@ -296,6 +313,22 @@ export class Game {
         }
       },
       onDepositPresentationComplete: (items, ev, ol) => {
+        const relicItem = items.find((it) => it.type === 'relic')
+        if (relicItem) {
+          this.player.getPosition(this.playerPos)
+          this.burstSpawnScratch.copy(this.playerPos)
+          this.burstSpawnScratch.y += 0.42
+          this.burstParticles.push(
+            ...spawnRelicCollectBurst(
+              this.burstGroup,
+              this.burstSpawnScratch,
+            ),
+          )
+          showRelicBankedCelebration(this.gameViewport, relicItem.value)
+          spawnRelicScreenSparkBurst(this.gameViewport)
+          playJuiceSound('relic_collect')
+        }
+
         if (ol.overloadActive) {
           this.depositFeedback.triggerOverloadBurst(ol.perfect)
         } else {
@@ -341,20 +374,27 @@ export class Game {
           }, 2400)
         }
         if (hudDepositToast && depositAmountEl && depositHintEl) {
-          if (this.depositToastTimer) clearTimeout(this.depositToastTimer)
-          this.fillDepositToastLines(
-            depositAmountEl,
-            depositHintEl,
-            ev,
-            ol,
-          )
-          hudDepositToast.classList.remove('hidden')
-          hudDepositToast.classList.add('visible')
-          this.depositToastTimer = setTimeout(() => {
-            hudDepositToast.classList.remove('visible')
-            hudDepositToast.classList.add('hidden')
-            this.depositToastTimer = null
-          }, DEPOSIT_TOAST_MS)
+          const showDepositToast = (): void => {
+            if (this.depositToastTimer) clearTimeout(this.depositToastTimer)
+            this.fillDepositToastLines(
+              depositAmountEl,
+              depositHintEl,
+              ev,
+              ol,
+            )
+            hudDepositToast.classList.remove('hidden')
+            hudDepositToast.classList.add('visible')
+            this.depositToastTimer = setTimeout(() => {
+              hudDepositToast.classList.remove('visible')
+              hudDepositToast.classList.add('hidden')
+              this.depositToastTimer = null
+            }, DEPOSIT_TOAST_MS)
+          }
+          if (relicItem) {
+            window.setTimeout(showDepositToast, 520)
+          } else {
+            showDepositToast()
+          }
         }
       },
     })
@@ -393,24 +433,44 @@ export class Game {
       this.player.update(dt, j)
       this.player.getPosition(this.playerPos)
 
+      const dr = DEFAULT_DEPOSIT_ZONE_RADIUS
+      const inDepositZone =
+        this.playerPos.x * this.playerPos.x + this.playerPos.z * this.playerPos.z <=
+        dr * dr
+
       this.upgradeZones.update(dt)
       this.syncUpgradeHud()
 
       const intervalSec = this.upgradeZones.getPulseIntervalSec()
       const durationSec = this.upgradeZones.getPulseDurationSec()
       const safeDur = Math.min(durationSec, intervalSec * 0.92)
+
+      const pulsePaused =
+        inDepositZone || this.upgradeZones.isPlayerInsideAnyPadZone()
+      const wasPaused = this.prevPulsePaused ?? false
+      if (wasPaused && !pulsePaused) {
+        this.ghostPulseClockSec = safeDur
+      } else if (!wasPaused && pulsePaused) {
+        this.ghostPulseClockSec = safeDur
+      } else if (!pulsePaused) {
+        this.ghostPulseClockSec += dt
+      }
+      this.prevPulsePaused = pulsePaused
+
       const pulse = computeGhostPulsePhase(
-        this.elapsedSec,
+        this.ghostPulseClockSec,
         intervalSec,
         durationSec,
       )
+      /** Phase time is frozen in hub; pulse combat/tint/speed stay off there too. */
+      const pulseGameplayActive = pulse.active && !pulsePaused
 
       this.itemWorld.updateVisuals(this.elapsedSec, dt)
 
       this.player.setPowerSpeedMultiplier(
-        pulse.active ? GHOST_PULSE_SPEED_MULTIPLIER : 1,
+        pulseGameplayActive ? GHOST_PULSE_SPEED_MULTIPLIER : 1,
       )
-      this.powerTintEl?.classList.toggle('hud-power-tint--on', pulse.active)
+      this.powerTintEl?.classList.toggle('hud-power-tint--on', pulseGameplayActive)
       if (this.powerTimerEl && this.powerTimerFillEl) {
         this.powerTimerEl.hidden = false
         let fillPct = 0
@@ -436,13 +496,20 @@ export class Game {
         )
       }
 
-      if (pulse.active && !this.prevGhostPulseActive) {
+      if (
+        pulse.active &&
+        !this.prevGhostPulseActive &&
+        !pulsePaused
+      ) {
         playJuiceSound('ghost_pulse')
       }
       this.prevGhostPulseActive = pulse.active
 
-      this.ghostSystem.setPowerMode(pulse.active, this.elapsedSec)
-      this.ghostSystem.update(dt, this.playerPos)
+      this.ghostSystem.setPowerMode(
+        pulseGameplayActive,
+        this.ghostPulseClockSec,
+      )
+      this.ghostSystem.update(dt, this.playerPos, this.stack.hasRelic())
 
       this.ghostHitInvuln = Math.max(0, this.ghostHitInvuln - dt)
       if (!this.ghostDamageArmed) {
@@ -526,11 +593,7 @@ export class Game {
             spawnFloatingHudText(this.gameViewport, '+1', 'float-hud--pickup')
             playJuiceSound('pickup')
           } else if (it.type === 'relic') {
-            spawnFloatingHudText(
-              this.gameViewport,
-              `+${it.value}`,
-              'float-hud--pickup',
-            )
+            showRelicPickupHint(this.gameViewport)
             playJuiceSound('pickup')
           }
         }
@@ -543,7 +606,7 @@ export class Game {
         velX: this.velScratch.x,
         itemsCarried: this.stack.count,
         maxCarry: this.stack.maxCapacity,
-        powerMode: pulse.active,
+        powerMode: pulseGameplayActive,
         ghostInvuln: this.ghostHitInvuln > 0,
       })
       this.cameraRig.update(dt)
@@ -551,14 +614,7 @@ export class Game {
       this.itemWorld.updateCollectEffects(dt)
       this.stackVisual.update(dt)
       this.depositController.update(dt)
-      {
-        const dr = DEFAULT_DEPOSIT_ZONE_RADIUS
-        const inDeposit =
-          this.playerPos.x * this.playerPos.x +
-            this.playerPos.z * this.playerPos.z <=
-          dr * dr
-        this.depositFeedback.setPlayerInside(inDeposit)
-      }
+      this.depositFeedback.setPlayerInside(inDepositZone)
       this.depositFeedback.update(dt)
       this.roomWispSpawns.update(dt, this.elapsedSec)
       this.specialRelicSpawns.update(dt)

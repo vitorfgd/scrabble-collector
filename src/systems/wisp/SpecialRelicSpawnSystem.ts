@@ -16,6 +16,8 @@ export type SpecialRelicSpawnSystemOptions = {
   worldCollision: WorldCollision
   createRelic: () => RelicItem
   random?: () => number
+  /** Fired after a relic is successfully placed in the world. */
+  onSpawn?: () => void
 }
 
 /**
@@ -28,6 +30,7 @@ export class SpecialRelicSpawnSystem {
   private readonly worldCollision: WorldCollision
   private readonly createRelic: () => RelicItem
   private readonly random: () => number
+  private readonly onSpawn?: () => void
 
   private timer = SPECIAL_RELIC_INTERVAL_SEC
   private activeRelicId: string | null = null
@@ -38,6 +41,7 @@ export class SpecialRelicSpawnSystem {
     this.worldCollision = opts.worldCollision
     this.createRelic = opts.createRelic
     this.random = opts.random ?? Math.random
+    this.onSpawn = opts.onSpawn
   }
 
   update(dt: number): void {
@@ -83,6 +87,7 @@ export class SpecialRelicSpawnSystem {
       const item = this.createRelic()
       this.itemWorld.spawn(item, x, z)
       this.activeRelicId = item.id
+      this.onSpawn?.()
       return
     }
   }

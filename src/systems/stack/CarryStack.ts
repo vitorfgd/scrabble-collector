@@ -87,4 +87,12 @@ export class CarryStack {
   getSnapshot(): readonly GameItem[] {
     return this.items
   }
+
+  /** True if any carried item is a high-value relic (global ghost aggro). */
+  hasRelic(): boolean {
+    for (const it of this.items) {
+      if (it.type === 'relic') return true
+    }
+    return false
+  }
 }

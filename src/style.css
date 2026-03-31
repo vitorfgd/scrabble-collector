@@ -254,6 +254,95 @@ body {
     0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
+.float-hud--relic-spawn {
+  max-width: min(92%, 340px);
+  text-align: center;
+  font: 800 clamp(13px, 3.8vw, 17px) system-ui, sans-serif;
+  line-height: 1.35;
+  color: #ffe8b0;
+  text-shadow:
+    0 0 16px rgba(255, 200, 80, 0.9),
+    0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+/* Single block: title + subtitle stack (no overlap) */
+.float-hud--relic-banked-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: min(94vw, 460px);
+  max-width: min(94vw, 460px);
+  text-align: center;
+  z-index: 15;
+}
+
+.float-hud--relic-banked-title {
+  font: 900 clamp(28px, 8.5vw, 44px) system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  color: #fff8e0;
+  text-shadow:
+    0 0 22px rgba(255, 200, 60, 1),
+    0 0 48px rgba(255, 160, 40, 0.45),
+    0 3px 14px rgba(0, 0, 0, 0.65);
+}
+
+.float-hud--relic-banked-sub {
+  font: 800 clamp(15px, 4.2vw, 22px) system-ui, sans-serif;
+  line-height: 1.4;
+  color: #ffd090;
+  text-shadow:
+    0 0 14px rgba(255, 180, 60, 0.85),
+    0 2px 10px rgba(0, 0, 0, 0.55);
+  max-width: 38ch;
+}
+
+.float-hud--relic-pickup-hint {
+  max-width: min(92%, 360px);
+  text-align: center;
+  font: 700 clamp(12px, 3.6vw, 16px) system-ui, sans-serif;
+  line-height: 1.35;
+  color: #e8f0ff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+
+.relic-spark {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 35%,
+    #fffef0 0%,
+    #ffcc40 42%,
+    rgba(255, 140, 40, 0.35) 68%,
+    transparent 78%
+  );
+  pointer-events: none;
+  z-index: 14;
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.relic-spark--burst {
+  animation: relicSparkBurst 0.68s ease-out forwards;
+}
+
+@keyframes relicSparkBurst {
+  0% {
+    opacity: 1;
+    transform: scale(1) translate(0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.25) translate(var(--sx, 0px), var(--sy, -80px));
+  }
+}
+
 /* Upgrade pad: bottom sheet (thumb zone), tap to buy */
 .hud-upgrade {
   position: absolute;
