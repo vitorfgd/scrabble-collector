@@ -1,4 +1,5 @@
 import {
+  AnimationMixer,
   Mesh,
   Sprite,
   SpriteMaterial,
@@ -7,6 +8,7 @@ import {
 import { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createStackMesh } from '../items/ItemVisuals.ts'
+import { disposeWispGltfClone } from '../wisp/wispGltfAsset.ts'
 import {
   STACK_ADD_BOUNCE,
   STACK_BOUNCE_DECAY,
@@ -49,13 +51,14 @@ export class StackVisual {
     if (samePrefix && ids.length === this.prevIds.length + 1) {
       const item = items[items.length - 1]
       const mesh = createStackMesh(item)
+      const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
       mesh.userData.stackItemId = item.id
       const i = items.length - 1
       mesh.position.y = i * STEP_Y + STACK_ADD_BOUNCE * STEP_Y
       mesh.position.x = 0
       mesh.position.z = 0
-      mesh.scale.setScalar(SPAWN_SCALE)
-      mesh.userData.stackTargetScale = 1
+      mesh.scale.setScalar(baseScale * SPAWN_SCALE)
+      mesh.userData.stackTargetScale = baseScale
       mesh.userData.stackBounce = 1
       this.anchor.add(mesh)
       this.meshes.push(mesh)
@@ -73,6 +76,8 @@ export class StackVisual {
     const kY = 1 - Math.exp(-12 * dt)
     const kB = 1 - Math.exp(-STACK_BOUNCE_DECAY * dt)
     this.meshes.forEach((mesh, i) => {
+      const wispMixer = mesh.userData.wispMixer as AnimationMixer | undefined
+      if (wispMixer) wispMixer.update(dt)
       const bounce = (mesh.userData.stackBounce as number | undefined) ?? 0
       const targetY = i * STEP_Y + bounce * STEP_Y * STACK_ADD_BOUNCE
       mesh.position.y += (targetY - mesh.position.y) * kY
@@ -116,9 +121,12 @@ export class StackVisual {
     this.clearMeshes()
     items.forEach((item, i) => {
       const mesh = createStackMesh(item)
+      const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
       mesh.userData.stackItemId = item.id
+      mesh.userData.stackTargetScale = baseScale
+      mesh.userData.stackBounce = 0
       mesh.position.y = i * STEP_Y
-      mesh.scale.setScalar(1)
+      mesh.scale.setScalar(baseScale)
       this.anchor.add(mesh)
       this.meshes.push(mesh)
     })
@@ -127,6 +135,10 @@ export class StackVisual {
   private clearMeshes(): void {
     for (const m of this.meshes) {
       this.anchor.remove(m)
+      if (m.userData.wispGltf === true) {
+        disposeWispGltfClone(m)
+        continue
+      }
       m.traverse((o) => {
         if (o instanceof Sprite) {
           const sm = o.material as SpriteMaterial

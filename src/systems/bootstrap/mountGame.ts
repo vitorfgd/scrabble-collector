@@ -1,9 +1,13 @@
 import { Game } from '../../core/Game.ts'
 import { GHOST_GLTF_URL } from '../ghost/ghostConfig.ts'
 import { loadGhostEnemyGltf } from '../ghost/ghostGltfAsset.ts'
+import { loadWispPickupGltf, WISP_GLTF_URL } from '../wisp/wispGltfAsset.ts'
 
 export async function mountGame(host: HTMLElement): Promise<Game> {
-  const loaded = await loadGhostEnemyGltf(GHOST_GLTF_URL)
+  const [, loaded] = await Promise.all([
+    loadWispPickupGltf(WISP_GLTF_URL),
+    loadGhostEnemyGltf(GHOST_GLTF_URL),
+  ])
   if (!loaded.ok) {
     console.warn(
       '[ghost] Using procedural enemy mesh. GLB not used. Reason:',

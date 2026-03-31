@@ -9,6 +9,7 @@ import { MANSION_WALL_COLLIDERS } from '../world/mansionWalls.ts'
 import { addWallSconces } from './mansionSconces.ts'
 import { MANSION_WORLD_HALF } from '../world/mansionGeometry.ts'
 import { CORRIDOR_BOUNDS, ROOMS, type RoomId } from '../world/mansionRoomData.ts'
+import { addMansionFloorRocks } from './mansionFloorRocks.ts'
 
 const WALL_HEIGHT = 2.35
 const WALL_Y = WALL_HEIGHT * 0.5
@@ -165,6 +166,7 @@ export function createMansionGround(): Group {
 
   addWallMeshes(root)
   addWallSconces(root)
+  addMansionFloorRocks(root)
   addEdgeVignette(root)
 
   return root

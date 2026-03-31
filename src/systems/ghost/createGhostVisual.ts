@@ -5,6 +5,7 @@ import {
   Color,
   Group,
   LatheGeometry,
+  LoopRepeat,
   Mesh,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
@@ -129,7 +130,26 @@ function createGltfGhostVisual(bodyColor: number, template: GhostGltfTemplate): 
   if (idleClip) idleAction = mixer.clipAction(idleClip)
   if (chaseClip) chaseAction = mixer.clipAction(chaseClip)
 
-  if (idleAction && chaseAction && idleClip !== chaseClip) {
+  const sameClip =
+    Boolean(idleClip && chaseClip && idleClip === chaseClip) ||
+    Boolean(idleAction && chaseAction && idleAction === chaseAction)
+
+  if (idleAction) idleAction.setLoop(LoopRepeat, Infinity)
+  if (chaseAction && chaseAction !== idleAction) {
+    chaseAction.setLoop(LoopRepeat, Infinity)
+  }
+  if (idleAction) {
+    idleAction.clampWhenFinished = false
+    idleAction.enabled = true
+    idleAction.paused = false
+  }
+  if (chaseAction) {
+    chaseAction.clampWhenFinished = false
+    chaseAction.enabled = true
+    chaseAction.paused = false
+  }
+
+  if (idleAction && chaseAction && !sameClip) {
     idleAction.reset().setEffectiveWeight(1).play()
     chaseAction.reset().setEffectiveWeight(0).play()
   } else if (idleAction) {
@@ -141,7 +161,7 @@ function createGltfGhostVisual(bodyColor: number, template: GhostGltfTemplate): 
   }
 
   const setChaseAnim = (chasing: boolean): void => {
-    if (!idleAction || !chaseAction || idleClip === chaseClip) return
+    if (!idleAction || !chaseAction || sameClip) return
     if (chasing === prevChase) return
     prevChase = chasing
     if (chasing) {
@@ -158,15 +178,20 @@ function createGltfGhostVisual(bodyColor: number, template: GhostGltfTemplate): 
     _vz: number,
     chaseAnim?: boolean,
   ): void => {
-    mixer.update(dt)
-    if (
-      idleAction &&
-      chaseAction &&
-      idleClip !== chaseClip &&
-      chaseAnim !== undefined
-    ) {
-      setChaseAnim(chaseAnim)
+    if (sameClip) {
+      if (idleAction && !idleAction.isRunning()) idleAction.reset().play()
+      mixer.update(dt)
+      return
     }
+    if (idleAction && chaseAction && !sameClip && chaseAnim !== undefined) {
+      setChaseAnim(chaseAnim)
+      if (chaseAnim && !chaseAction.isRunning()) {
+        chaseAction.reset().play()
+      } else if (!chaseAnim && !idleAction.isRunning()) {
+        idleAction.reset().play()
+      }
+    }
+    mixer.update(dt)
   }
 
   root.userData.disposeGhostAnim = (): void => {

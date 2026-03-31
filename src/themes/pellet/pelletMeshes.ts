@@ -5,11 +5,17 @@ import {
   MeshStandardMaterial,
   OctahedronGeometry,
   SphereGeometry,
+  type Object3D,
 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
+import {
+  cloneWispPickupFromGltf,
+  getWispPickupPrototype,
+  WISP_STACK_TARGET_MAX_DIM,
+} from '../../systems/wisp/wispGltfAsset.ts'
 
 const SOUL_BODY_R = 0.1
-const SOUL_STACK_R = 0.14
+const SOUL_STACK_R = 0.06
 
 /** `hue` is Three.js HSL hue in the cyan–teal band (stored on `GameItem`). */
 function soulColors(hue: number): {
@@ -70,6 +76,9 @@ export function createRelicPickupMesh(hue: number): Group {
 }
 
 export function createWispPickupMesh(hue: number): Group {
+  if (getWispPickupPrototype()) {
+    return cloneWispPickupFromGltf(hue)
+  }
   const root = new Group()
   root.name = 'wispSoulPickup'
   const { core, mid, emissive, outer } = soulColors(hue)
@@ -128,7 +137,12 @@ export function createWispPickupMesh(hue: number): Group {
   return root
 }
 
-function createWispStackMesh(hue: number): Mesh {
+function createWispStackMesh(hue: number): Object3D {
+  if (getWispPickupPrototype()) {
+    return cloneWispPickupFromGltf(hue, {
+      targetMaxDim: WISP_STACK_TARGET_MAX_DIM,
+    })
+  }
   const { core, emissive } = soulColors(hue)
   const mat = new MeshStandardMaterial({
     color: core,
@@ -164,7 +178,7 @@ function createRelicStackMesh(hue: number): Mesh {
   return mesh
 }
 
-export function createPelletStackMesh(item: GameItem): Mesh | Group {
+export function createPelletStackMesh(item: GameItem): Object3D {
   if (item.type === 'relic') {
     return createRelicStackMesh(item.hue)
   }

@@ -1,4 +1,5 @@
 import {
+  AnimationMixer,
   Mesh,
   Sprite,
   SpriteMaterial,
@@ -8,6 +9,7 @@ import {
 } from 'three'
 import type { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
+import { disposeWispGltfClone } from '../wisp/wispGltfAsset.ts'
 import { createPickupMesh } from './ItemVisuals.ts'
 import {
   attachPickupIdleMotion,
@@ -27,6 +29,7 @@ export class ItemWorld {
   private readonly pickupGroup: Group
   private readonly scene: Scene
   private readonly collectAnims: CollectAnim[] = []
+  private readonly pendingDisposals: Object3D[] = []
 
   constructor(pickupGroup: Group, scene: Scene) {
     this.pickupGroup = pickupGroup
@@ -83,7 +86,7 @@ export class ItemWorld {
     this.byId.delete(id)
     this.pickupGroup.remove(e.mesh)
     delete e.mesh.userData.pickupIdle
-    this.scene.attach(e.mesh)
+    this.scene.add(e.mesh)
     this.collectAnims.push({ mesh: e.mesh, t: 0 })
   }
 
@@ -100,10 +103,11 @@ export class ItemWorld {
       }
       a.mesh.scale.setScalar(Math.max(0.001, s))
       if (p >= 1) {
-        this.disposeMesh(a.mesh)
+        this.pendingDisposals.push(a.mesh)
         this.collectAnims.splice(i, 1)
       }
     }
+    this.flushPendingDisposals(2)
   }
 
   getPickupCount(): number {
@@ -136,12 +140,19 @@ export class ItemWorld {
 
   updateVisuals(timeSec: number, dt: number): void {
     for (const [, { mesh, item }] of this.byId) {
+      const wispMixer = mesh.userData.wispMixer as AnimationMixer | undefined
+      if (wispMixer) wispMixer.update(dt)
       updatePickupIdleMotion(mesh, timeSec, dt)
       if (item.type === 'wisp') {
         const body = mesh.userData.wispBody as Mesh | undefined
         const mid = mesh.userData.wispMid as Mesh | undefined
         const halo = mesh.userData.wispHalo as Mesh | undefined
         const h = item.hue * 20
+          if (mesh.userData.wispGltf === true) {
+            const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
+            const w = baseScale * (0.985 + 0.015 * Math.sin(timeSec * 3.8 + h))
+            mesh.scale.setScalar(w)
+          }
         if (body) {
           const pulse = 0.95 + 0.05 * Math.sin(timeSec * 3.8 + h)
           body.scale.setScalar(pulse)
@@ -184,6 +195,10 @@ export class ItemWorld {
   }
 
   private disposeMesh(root: Object3D): void {
+    if (root.userData.wispGltf === true) {
+      disposeWispGltfClone(root)
+      return
+    }
     root.removeFromParent()
     root.traverse((o) => {
       if (o instanceof Sprite) {
@@ -199,5 +214,14 @@ export class ItemWorld {
         else m.dispose()
       }
     })
+  }
+
+  private flushPendingDisposals(maxPerFrame: number): void {
+    if (this.pendingDisposals.length === 0) return
+    const n = Math.min(maxPerFrame, this.pendingDisposals.length)
+    for (let i = 0; i < n; i++) {
+      const mesh = this.pendingDisposals.pop()
+      if (mesh) this.disposeMesh(mesh)
+    }
   }
 }
