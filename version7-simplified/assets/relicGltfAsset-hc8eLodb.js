@@ -1,0 +1,1 @@
+import{s as e,t}from"./relicGltfAsset-D-MjDgSu.js";export{t as RELIC_GLTF_URLS,e as loadRelicGltfs};
