@@ -6,7 +6,6 @@ import {
   MeshStandardMaterial,
   Vector3,
 } from 'three'
-import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
 import type { GhostGltfTemplate } from './ghostGltfAsset.ts'
 import { createGhostVisual } from './createGhostVisual.ts'
 import { MANSION_WORLD_HALF } from '../world/mansionGeometry.ts'
@@ -15,7 +14,7 @@ import {
   DEFAULT_GHOST_SPAWNS,
   GHOST_CHASE_SPEED,
   GHOST_COLLISION_RADIUS,
-  GHOST_DEPOSIT_EXCLUSION_RADIUS,
+  GHOST_DEPOSIT_EXCLUSION_PADDING,
   GHOST_DETECT_RADIUS,
   GHOST_DIRECTION_SMOOTH_CHASE,
   GHOST_DIRECTION_SMOOTH_FRIGHT,
@@ -28,6 +27,7 @@ import {
   GHOST_POST_HIT_CHASE_LOCKOUT_SEC,
   GHOST_POST_HIT_DISENGAGE_SPEED,
   GHOST_POST_HIT_SEPARATION,
+  GHOST_EAT_SHRINK_SEC,
   GHOST_RESPAWN_AFTER_EAT_SEC,
   GHOST_STEERING_ACCEL_CHASE,
   GHOST_STEERING_ACCEL_FRIGHT,
@@ -37,6 +37,7 @@ import {
   GHOST_WANDER_TURN_MIN,
   type GhostSpawnSpec,
 } from './ghostConfig.ts'
+import { ROOMS } from '../world/mansionRoomData.ts'
 
 export type GhostBehaviorState = 'wander' | 'chase'
 
@@ -70,16 +71,19 @@ export class GhostSystem {
   update(dt: number, playerPos: Vector3, playerCarryingRelic: boolean): void {
     this.ghostAnimTime += dt
     const frightened = this.powerModeActive
-    const dr = DEFAULT_DEPOSIT_ZONE_RADIUS
-    const playerInDepositZone =
-      playerPos.x * playerPos.x + playerPos.z * playerPos.z <= dr * dr
+    const hub = ROOMS.SAFE_CENTER.bounds
+    const playerInSafeCenter =
+      playerPos.x >= hub.minX &&
+      playerPos.x <= hub.maxX &&
+      playerPos.z >= hub.minZ &&
+      playerPos.z <= hub.maxZ
     for (const g of this.ghosts) {
       g.update(
         dt,
         playerPos,
         frightened,
         this.ghostAnimTime,
-        playerInDepositZone,
+        playerInSafeCenter,
         playerCarryingRelic,
       )
       g.updateVulnerableAppearance(this.powerModeActive, this.powerModeTimeSec)
@@ -231,6 +235,8 @@ class Ghost {
   private wanderTimer = 0
 
   private eaten = false
+  /** >0 while scaling down after capture; respawn timer starts after shrink. */
+  private eatShrinkRemaining = 0
   private respawnRemaining = 0
   /** While > 0, cannot transition wander → chase (after scoring a hit on the player). */
   private chaseLockout = 0
@@ -280,8 +286,8 @@ class Ghost {
 
   markEaten(): void {
     this.eaten = true
-    this.root.visible = false
-    this.respawnRemaining = GHOST_RESPAWN_AFTER_EAT_SEC
+    this.eatShrinkRemaining = GHOST_EAT_SHRINK_SEC
+    this.respawnRemaining = 0
     this.velocity.set(0, 0, 0)
     this.chaseLockout = 0
   }
@@ -360,14 +366,30 @@ class Ghost {
     playerPos: Vector3,
     frightened: boolean,
     timeSec: number,
-    playerInDepositZone: boolean,
+    playerInSafeCenter: boolean,
     relicCarried: boolean,
   ): void {
     if (this.eaten) {
+      if (this.eatShrinkRemaining > 0) {
+        this.eatShrinkRemaining -= dt
+        const t = Math.max(
+          0,
+          this.eatShrinkRemaining / GHOST_EAT_SHRINK_SEC,
+        )
+        this.root.scale.setScalar(t)
+        if (this.eatShrinkRemaining <= 0) {
+          this.root.visible = false
+          this.root.scale.setScalar(1)
+          this.eatShrinkRemaining = 0
+          this.respawnRemaining = GHOST_RESPAWN_AFTER_EAT_SEC
+        }
+        return
+      }
       this.respawnRemaining -= dt
       if (this.respawnRemaining <= 0) {
         this.eaten = false
         this.root.visible = true
+        this.root.scale.setScalar(1)
         this.root.position.set(this.spawnX, 0, this.spawnZ)
         this.velocity.set(0, 0, 0)
         this.state = 'wander'
@@ -407,7 +429,7 @@ class Ghost {
       tx = ax * inv
       tz = az * inv
       targetSpeed = GHOST_FRIGHT_SPEED
-    } else if (playerInDepositZone && !relicCarried) {
+    } else if (playerInSafeCenter && !relicCarried) {
       if (this.state === 'chase') {
         this.state = 'wander'
         this.pickWanderTimer()
@@ -486,7 +508,7 @@ class Ghost {
       dirSmooth = GHOST_DIRECTION_SMOOTH_FRIGHT
     } else if (
       this.state === 'chase' &&
-      (relicCarried || !playerInDepositZone)
+      (relicCarried || !playerInSafeCenter)
     ) {
       dirSmooth = GHOST_DIRECTION_SMOOTH_CHASE
     }
@@ -507,7 +529,7 @@ class Ghost {
       steerAccel = GHOST_STEERING_ACCEL_FRIGHT
     } else if (
       this.state === 'chase' &&
-      (relicCarried || !playerInDepositZone)
+      (relicCarried || !playerInSafeCenter)
     ) {
       steerAccel = GHOST_STEERING_ACCEL_CHASE
     }
@@ -538,7 +560,7 @@ class Ghost {
     /** Run clip during pulse flee and during chase; idle only for calm wander. */
     const chaseAnim =
       frightened ||
-      (this.state === 'chase' && (relicCarried || !playerInDepositZone))
+      (this.state === 'chase' && (relicCarried || !playerInSafeCenter))
     const anim = this.root.userData.updateGhostAnimation as
       | ((
           dt: number,
@@ -551,31 +573,72 @@ class Ghost {
     anim?.(dt, timeSec, this.velocity.x, this.velocity.z, chaseAnim)
 
     this.applyEdgeNudge(targetSpeed)
-    this.excludeFromDepositZone()
+    this.excludeFromSafeCenterRoom()
     this.resolveWallCollision()
   }
 
-  /** Deposit circle at world origin — ghosts cannot overlap the player drop zone. */
-  private excludeFromDepositZone(): void {
-    const cx = 0
-    const cz = 0
-    const px = this.root.position.x
-    const pz = this.root.position.z
-    let dx = px - cx
-    let dz = pz - cz
-    let dist = Math.hypot(dx, dz)
-    const minR = GHOST_DEPOSIT_EXCLUSION_RADIUS
-    if (dist >= minR) return
+  /**
+   * Hub interior (`SAFE_CENTER`) is a no-go for ghosts — keep circle body + padding clear of the AABB.
+   */
+  private excludeFromSafeCenterRoom(): void {
+    const { minX, maxX, minZ, maxZ } = ROOMS.SAFE_CENTER.bounds
+    const r = GHOST_COLLISION_RADIUS + GHOST_DEPOSIT_EXCLUSION_PADDING
+    let px = this.root.position.x
+    let pz = this.root.position.z
 
-    if (dist < 1e-5) {
-      dx = Math.cos(this.wanderAngle)
-      dz = Math.sin(this.wanderAngle)
-      dist = 1
+    const qx = Math.max(minX, Math.min(px, maxX))
+    const qz = Math.max(minZ, Math.min(pz, maxZ))
+    let dx = px - qx
+    let dz = pz - qz
+    let dist = Math.hypot(dx, dz)
+
+    let nx: number
+    let nz: number
+
+    if (dist < 1e-8) {
+      const dl = px - minX
+      const dr = maxX - px
+      const dd = pz - minZ
+      const du = maxZ - pz
+      const m = Math.min(dl, dr, dd, du)
+      let bx = px
+      let bz = pz
+      if (m === dl) {
+        bx = minX
+        bz = Math.max(minZ, Math.min(pz, maxZ))
+      } else if (m === dr) {
+        bx = maxX
+        bz = Math.max(minZ, Math.min(pz, maxZ))
+      } else if (m === dd) {
+        bz = minZ
+        bx = Math.max(minX, Math.min(px, maxX))
+      } else {
+        bz = maxZ
+        bx = Math.max(minX, Math.min(px, maxX))
+      }
+      const tx = px - bx
+      const tz = pz - bz
+      const tlen = Math.hypot(tx, tz)
+      if (tlen < 1e-8) {
+        nx = Math.cos(this.wanderAngle)
+        nz = Math.sin(this.wanderAngle)
+      } else {
+        nx = tx / tlen
+        nz = tz / tlen
+      }
+      px = bx + nx * r
+      pz = bz + nz * r
+    } else {
+      if (dist >= r) return
+      nx = dx / dist
+      nz = dz / dist
+      px = qx + nx * r
+      pz = qz + nz * r
     }
-    const nx = dx / dist
-    const nz = dz / dist
-    this.root.position.x = cx + nx * minR
-    this.root.position.z = cz + nz * minR
+
+    this.root.position.x = px
+    this.root.position.z = pz
+
     const vn = this.velocity.x * nx + this.velocity.z * nz
     if (vn < 0) {
       this.velocity.x -= vn * nx

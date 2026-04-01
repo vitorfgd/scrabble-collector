@@ -2,7 +2,6 @@
  * Ghost AI tuning — adjust here; speeds also in `gameplaySpeed.ts` (player vs ghost balance).
  */
 
-import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
 import { roomCenter } from '../world/mansionRoomData.ts'
 
 export {
@@ -85,16 +84,10 @@ export const GHOST_GLB_YAW_OFFSET = 0
 export const GHOST_COLLISION_RADIUS = 0.345
 
 /**
- * Extra clearance beyond deposit disc + ghost body so ghosts do not skim the drop zone edge.
+ * Extra clearance so ghost bodies do not skim the safe hub (`SAFE_CENTER`) edges.
+ * Used with `GHOST_COLLISION_RADIUS` for rectangle exclusion in `GhostSystem`.
  */
 export const GHOST_DEPOSIT_EXCLUSION_PADDING = 0.14
-
-/**
- * Ghost centers must stay at or beyond this distance from deposit center (0,0) on XZ —
- * deposit disc + ghost body + padding (ghosts cannot enter the safe drop zone).
- */
-export const GHOST_DEPOSIT_EXCLUSION_RADIUS =
-  DEFAULT_DEPOSIT_ZONE_RADIUS + GHOST_COLLISION_RADIUS + GHOST_DEPOSIT_EXCLUSION_PADDING
 
 /**
  * Extra clearance before another damage hit can register after leaving ghost melee
@@ -131,6 +124,9 @@ export const GHOST_POST_HIT_CHASE_LOCKOUT_SEC = 1.65
 
 /** Money granted when the player eats a ghost during power mode */
 export const GHOST_EAT_MONEY_REWARD = 38
+
+/** Visual shrink duration when captured (before hide + respawn timer). */
+export const GHOST_EAT_SHRINK_SEC = 0.38
 
 /** Seconds before an eaten ghost respawns at its spawn point */
 export const GHOST_RESPAWN_AFTER_EAT_SEC = 4.25

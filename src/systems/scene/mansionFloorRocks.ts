@@ -18,9 +18,9 @@ import {
 const ROCK_GEO = new DodecahedronGeometry(1, 0)
 
 const rockMat = new MeshStandardMaterial({
-  color: 0x5a5864,
-  emissive: 0x1f2430,
-  emissiveIntensity: 0.06,
+  color: 0x5c5a6a,
+  emissive: 0x222838,
+  emissiveIntensity: 0.07,
   roughness: 0.93,
   metalness: 0.1,
 })

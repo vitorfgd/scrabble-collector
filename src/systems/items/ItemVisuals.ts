@@ -8,7 +8,7 @@ import {
 
 export function createPickupMesh(item: GameItem): Object3D {
   if (item.type === 'relic') {
-    return createRelicPickupMesh(item.hue)
+    return createRelicPickupMesh(item.hue, item.relicVariant)
   }
   return createWispPickupMesh(item.hue)
 }

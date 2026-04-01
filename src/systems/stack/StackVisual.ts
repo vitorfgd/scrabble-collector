@@ -8,6 +8,7 @@ import {
 import { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import { createStackMesh } from '../items/ItemVisuals.ts'
+import { disposeRelicGltfClone } from '../relic/relicGltfAsset.ts'
 import { disposeWispGltfClone } from '../wisp/wispGltfAsset.ts'
 import {
   STACK_ADD_BOUNCE,
@@ -17,13 +18,24 @@ import {
 const STEP_Y = 0.44
 const SPAWN_SCALE = 0.14
 
+/**
+ * Wisp GLB stores `wispBaseScale`; relic GLB stores `relicBaseScale`.
+ * We must read both — using only `wispBaseScale` made relics fall back to 1 (huge).
+ */
+function stackMeshBaseScale(mesh: Object3D): number {
+  const w = mesh.userData.wispBaseScale as number | undefined
+  const r = mesh.userData.relicBaseScale as number | undefined
+  const s = w ?? r
+  return s !== undefined && s > 0 ? s : 1
+}
+
 /** Carried stack meshes on the anchor; data-driven, type-agnostic */
 export class StackVisual {
   private meshes: Object3D[] = []
   private prevIds: string[] = []
   private readonly anchor: Object3D
   private readonly poolWisp: Object3D[] = []
-  private readonly poolRelic: Object3D[] = []
+  private readonly poolRelic: [Object3D[], Object3D[]] = [[], []]
   private static readonly MAX_POOL = 64
 
   constructor(anchor: Object3D) {
@@ -54,7 +66,7 @@ export class StackVisual {
     if (samePrefix && ids.length === this.prevIds.length + 1) {
       const item = items[items.length - 1]
       const mesh = this.obtainMesh(item)
-      const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
+      const baseScale = stackMeshBaseScale(mesh)
       mesh.userData.stackItemId = item.id
       mesh.userData.stackItemType = item.type
       const i = items.length - 1
@@ -82,6 +94,8 @@ export class StackVisual {
     this.meshes.forEach((mesh, i) => {
       const wispMixer = mesh.userData.wispMixer as AnimationMixer | undefined
       if (wispMixer) wispMixer.update(dt)
+      const relicMixer = mesh.userData.relicMixer as AnimationMixer | undefined
+      if (relicMixer) relicMixer.update(dt)
       const bounce = (mesh.userData.stackBounce as number | undefined) ?? 0
       const targetY = i * STEP_Y + bounce * STEP_Y * STACK_ADD_BOUNCE
       mesh.position.y += (targetY - mesh.position.y) * kY
@@ -129,12 +143,15 @@ export class StackVisual {
     delete mesh.userData.depositWorldStart
     const mix = mesh.userData.wispMixer as AnimationMixer | undefined
     if (mix) mix.stopAllAction()
+    const rMix = mesh.userData.relicMixer as AnimationMixer | undefined
+    if (rMix) rMix.stopAllAction()
     if (item.type === 'wisp') {
       if (this.poolWisp.length < StackVisual.MAX_POOL) this.poolWisp.push(mesh)
       else this.disposeMesh(mesh)
       return
     }
-    if (this.poolRelic.length < StackVisual.MAX_POOL) this.poolRelic.push(mesh)
+    const v = item.relicVariant
+    if (this.poolRelic[v].length < StackVisual.MAX_POOL) this.poolRelic[v].push(mesh)
     else this.disposeMesh(mesh)
   }
 
@@ -142,7 +159,7 @@ export class StackVisual {
     this.clearMeshes()
     items.forEach((item, i) => {
       const mesh = this.obtainMesh(item)
-      const baseScale = (mesh.userData.wispBaseScale as number | undefined) ?? 1
+      const baseScale = stackMeshBaseScale(mesh)
       mesh.userData.stackItemId = item.id
       mesh.userData.stackItemType = item.type
       mesh.userData.stackTargetScale = baseScale
@@ -163,10 +180,13 @@ export class StackVisual {
         this.poolWisp.push(m)
         continue
       }
-      if (t === 'relic' && this.poolRelic.length < StackVisual.MAX_POOL) {
-        m.visible = false
-        this.poolRelic.push(m)
-        continue
+      if (t === 'relic') {
+        const v = (m.userData.relicVariant as 0 | 1 | undefined) ?? 0
+        if (this.poolRelic[v].length < StackVisual.MAX_POOL) {
+          m.visible = false
+          this.poolRelic[v].push(m)
+          continue
+        }
       }
       this.disposeMesh(m)
     }
@@ -179,10 +199,14 @@ export class StackVisual {
       m.visible = true
       return m
     }
-    if (item.type === 'relic' && this.poolRelic.length > 0) {
-      const m = this.poolRelic.pop()!
-      m.visible = true
-      return m
+    if (item.type === 'relic') {
+      const v = item.relicVariant
+      const pool = this.poolRelic[v]
+      if (pool.length > 0) {
+        const m = pool.pop()!
+        m.visible = true
+        return m
+      }
     }
     return createStackMesh(item)
   }
@@ -190,6 +214,10 @@ export class StackVisual {
   private disposeMesh(m: Object3D): void {
     if (m.userData.wispGltf === true) {
       disposeWispGltfClone(m)
+      return
+    }
+    if (m.userData.relicGltf === true) {
+      disposeRelicGltfClone(m)
       return
     }
     m.traverse((o) => {

@@ -74,6 +74,18 @@ function tintableMaterial(
   return m instanceof MeshStandardMaterial || m instanceof MeshPhysicalMaterial
 }
 
+/**
+ * `SkeletonUtils.clone` reuses materials by reference — every ghost would share one material,
+ * so per-spawn tint and power-mode / resetSkin would fight and all ghosts would match.
+ */
+function cloneMeshMaterialsDeep(model: Group): void {
+  model.traverse((o) => {
+    if (!(o instanceof Mesh)) return
+    const mat = o.material
+    o.material = Array.isArray(mat) ? mat.map((m) => m.clone()) : mat.clone()
+  })
+}
+
 function applyBodyTint(model: Group, bodyColor: number): void {
   const tint = new Color(bodyColor)
   model.traverse((o) => {
@@ -100,6 +112,8 @@ function createGltfGhostVisual(bodyColor: number, template: GhostGltfTemplate): 
 
   const s = GHOST_VISUAL_SCALE
   model.scale.setScalar(s)
+
+  cloneMeshMaterialsDeep(model)
 
   model.traverse((o) => {
     if (o instanceof Mesh) {

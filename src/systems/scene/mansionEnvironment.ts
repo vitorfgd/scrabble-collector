@@ -30,19 +30,19 @@ function makeFloorMat(opts: {
 }
 
 /** Unified wood/stone tone — matches corridors and void tint. */
-const FLOOR_COLOR = 0x232638
+const FLOOR_COLOR = 0x2a2e44
 const floorMat = makeFloorMat({
   color: FLOOR_COLOR,
-  emissive: 0x141820,
-  emissiveIntensity: 0.22,
+  emissive: 0x1c2230,
+  emissiveIntensity: 0.28,
   roughness: 0.86,
 })
 
 /** Walls: cooler + lighter than floor so verticals read clearly vs boards. */
 const wallMat = new MeshStandardMaterial({
-  color: 0x4a4252,
-  emissive: 0x1c2030,
-  emissiveIntensity: 0.1,
+  color: 0x565068,
+  emissive: 0x242a3c,
+  emissiveIntensity: 0.13,
   roughness: 0.9,
   metalness: 0.05,
 })
@@ -97,9 +97,9 @@ function addWallMeshes(parent: Group): void {
 /** Soft edge bands — same family as floor. */
 function addEdgeVignette(parent: Group): void {
   const edge = new MeshStandardMaterial({
-    color: 0x1c2028,
-    emissive: 0x101820,
-    emissiveIntensity: 0.08,
+    color: 0x1e252e,
+    emissive: 0x121a24,
+    emissiveIntensity: 0.09,
     roughness: 0.96,
     metalness: 0,
     transparent: true,

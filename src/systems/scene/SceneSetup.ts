@@ -13,9 +13,11 @@ import {
 } from 'three'
 import type { Mesh as MeshType } from 'three'
 import { DEFAULT_DEPOSIT_ZONE_RADIUS } from '../deposit/DepositZone.ts'
+import type { PlayerGltfTemplate } from '../player/playerGltfAsset.ts'
 import { PlayerCharacterVisual } from '../player/PlayerCharacterVisual.ts'
 import { createUpgradePad } from '../upgrades/UpgradePadVisual.ts'
 import type { PadLabelPayload } from '../upgrades/UpgradePadVisual.ts'
+import { UPGRADE_PAD_HUB_OFFSET } from '../upgrades/upgradeConfig.ts'
 import { createMansionGround } from './mansionEnvironment.ts'
 
 export type SceneContents = {
@@ -37,7 +39,7 @@ export type SceneContents = {
   depositUnderglowMesh: MeshType
   /** Optional rim (unused — single disc deposit for one clear zone read) */
   depositRingMesh: MeshType | null
-  /** Procedural character (animation + stack anchor) */
+  /** Character (GLB or procedural + stack anchor) */
   playerCharacter: PlayerCharacterVisual
   /** Hub-corner upgrade pads */
   upgradeAreaRoot: Group
@@ -66,21 +68,23 @@ export type SceneContents = {
   }
 }
 
-export function createScene(): SceneContents {
+export function createScene(
+  playerGltfTemplate: PlayerGltfTemplate | null = null,
+): SceneContents {
   const scene = new Scene()
   /** Match floor family so door gaps never read as a different hue. */
-  scene.background = new Color(0x232638)
-  scene.fog = new Fog(0x2a3242, 58, 118)
+  scene.background = new Color(0x2a2e44)
+  scene.fog = new Fog(0x323a50, 58, 118)
 
   /** Base fill so floors/walls never fall to black. */
-  scene.add(new AmbientLight(0x8a9ab0, 0.38))
+  scene.add(new AmbientLight(0x96a6bc, 0.46))
 
   scene.add(
-    new HemisphereLight(0x9eb0c8, 0x343c4c, 0.52),
+    new HemisphereLight(0xaab8d0, 0x40485c, 0.58),
   )
 
   /** Primary moon key — cool, soft, readable shadows. */
-  const moon = new DirectionalLight(0xd8e8f5, 0.95)
+  const moon = new DirectionalLight(0xd8e8f5, 1.05)
   moon.position.set(-8, 24, 12)
   moon.castShadow = true
   moon.shadow.mapSize.setScalar(1024)
@@ -93,12 +97,12 @@ export function createScene(): SceneContents {
   scene.add(moon)
 
   /** Rim / bounce — lifts north-facing reads on portrait top-down. */
-  const fill = new DirectionalLight(0x6a7c90, 0.34)
+  const fill = new DirectionalLight(0x788ca0, 0.4)
   fill.position.set(14, 16, -16)
   scene.add(fill)
 
   /** Soft top-down fill: evens door gaps & wall bases without harsh pools. */
-  const top = new DirectionalLight(0xa8b8c8, 0.22)
+  const top = new DirectionalLight(0xb4c4d4, 0.28)
   top.position.set(0, 28, 2)
   scene.add(top)
 
@@ -106,7 +110,7 @@ export function createScene(): SceneContents {
   scene.add(ground)
 
   const playerRoot = new Group()
-  const character = new PlayerCharacterVisual()
+  const character = new PlayerCharacterVisual(playerGltfTemplate)
   playerRoot.add(character.root)
 
   /** Start inside hub deposit / safe circle (radius from `DEFAULT_DEPOSIT_ZONE_RADIUS`). */
@@ -168,7 +172,7 @@ export function createScene(): SceneContents {
   /** Four pads around hub center (between deposit and room walls). */
   const upgradeAreaRoot = new Group()
   upgradeAreaRoot.name = 'upgradeArea'
-  const hc = 3.05
+  const hc = UPGRADE_PAD_HUB_OFFSET
 
   const capacityPad = createUpgradePad('CAPACITY', 0x3a2c42, 0x8b7358)
   capacityPad.root.position.set(-hc, 0.02, hc)

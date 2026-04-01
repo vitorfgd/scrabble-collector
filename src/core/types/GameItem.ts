@@ -19,6 +19,8 @@ export type RelicItem = ItemCore & {
   type: 'relic'
   /** Gold tint (Three.js HSL hue) */
   hue: number
+  /** Which relic GLB mesh: `0` = calice, `1` = coin */
+  relicVariant: 0 | 1
 }
 
 export type GameItem = WispItem | RelicItem

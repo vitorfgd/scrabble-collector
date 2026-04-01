@@ -14,7 +14,7 @@ export function createRenderer(host: HTMLElement): WebGLRenderer {
 
   renderer.outputColorSpace = SRGBColorSpace
   renderer.toneMapping = ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.08
+  renderer.toneMappingExposure = 1.12
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = PCFShadowMap
 

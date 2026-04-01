@@ -18,6 +18,7 @@ export function createRelicItem(): RelicItem {
     kind: 'collectible',
     type: 'relic',
     hue: 0.11 + Math.random() * 0.06,
+    relicVariant: Math.random() < 0.5 ? 0 : 1,
     value: 72 + Math.floor(Math.random() * 49),
   }
 }

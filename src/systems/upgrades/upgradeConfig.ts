@@ -11,6 +11,11 @@ import {
 /** Starting stack slots before any capacity pad purchase */
 export const INITIAL_STACK_CAPACITY = 10
 
+/**
+ * Hub upgrade pad offset from origin on XZ (meters). Must match `SceneSetup` pad placement.
+ */
+export const UPGRADE_PAD_HUB_OFFSET = 3.05
+
 export const MAX_CAPACITY_UPGRADE_LEVELS = 12
 export const MAX_SPEED_UPGRADE_LEVELS = 12
 

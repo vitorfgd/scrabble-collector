@@ -9,6 +9,7 @@ import {
   MAX_PULSE_DURATION_UPGRADE_LEVELS,
   MAX_PULSE_FREQ_UPGRADE_LEVELS,
   MAX_SPEED_UPGRADE_LEVELS,
+  UPGRADE_PAD_HUB_OFFSET,
   capacityUpgradeCost,
   ghostPulseDurationForLevels,
   ghostPulseIntervalForFreqLevel,
@@ -21,7 +22,6 @@ import type { PadLabelPayload } from './UpgradePadVisual.ts'
 import { UPGRADE_PAD_ZONE_RADIUS } from './UpgradePadVisual.ts'
 
 const p = new Vector3()
-const center = new Vector3()
 
 export type UpgradeSpendKind =
   | 'capacity'
@@ -113,6 +113,12 @@ export class UpgradeZoneSystem {
   private occPulseFreq = 0
   private occPulseDuration = 0
 
+  /**
+   * Pads live under `upgradeAreaRoot` at scene origin — world positions are fixed (no per-frame
+   * `getWorldPosition`, which avoided a one-frame hitch when matrices were first sampled).
+   */
+  private readonly padWorld: Record<UpgradeSpendKind, Vector3>
+
   constructor(opts: UpgradeZoneSystemOptions) {
     this.economy = opts.economy
     this.player = opts.player
@@ -122,6 +128,14 @@ export class UpgradeZoneSystem {
     this.pulseFreqPad = opts.pulseFreqPad
     this.pulseDurationPad = opts.pulseDurationPad
     this.onSpendVfx = opts.onSpendVfx
+    const h = UPGRADE_PAD_HUB_OFFSET
+    const y = 0.02
+    this.padWorld = {
+      capacity: new Vector3(-h, y, h),
+      speed: new Vector3(h, y, h),
+      pulseFreq: new Vector3(-h, y, -h),
+      pulseDuration: new Vector3(h, y, -h),
+    }
     this.refreshCapacityLabel()
     this.refreshSpeedLabel()
     this.refreshPulseFreqLabel()
@@ -222,8 +236,7 @@ export class UpgradeZoneSystem {
         this.stack.setMaxCapacity(
           INITIAL_STACK_CAPACITY + this.capacityUpgradeLevel,
         )
-        this.capacityPad.root.getWorldPosition(center)
-        this.onSpendVfx?.('capacity', cost, center.clone())
+        this.onSpendVfx?.('capacity', cost, this.padWorld.capacity.clone())
         return true
       }
       case 'speed': {
@@ -232,8 +245,7 @@ export class UpgradeZoneSystem {
         if (!this.economy.trySpend(cost)) return false
         this.speedUpgradeLevel += 1
         this.player.setMaxSpeed(speedForLevel(this.speedUpgradeLevel))
-        this.speedPad.root.getWorldPosition(center)
-        this.onSpendVfx?.('speed', cost, center.clone())
+        this.onSpendVfx?.('speed', cost, this.padWorld.speed.clone())
         return true
       }
       case 'pulseFreq': {
@@ -241,8 +253,7 @@ export class UpgradeZoneSystem {
         const cost = pulseFreqUpgradeCost(this.pulseFreqLevel)
         if (!this.economy.trySpend(cost)) return false
         this.pulseFreqLevel += 1
-        this.pulseFreqPad.root.getWorldPosition(center)
-        this.onSpendVfx?.('pulseFreq', cost, center.clone())
+        this.onSpendVfx?.('pulseFreq', cost, this.padWorld.pulseFreq.clone())
         return true
       }
       case 'pulseDuration': {
@@ -251,8 +262,11 @@ export class UpgradeZoneSystem {
         const cost = pulseDurationUpgradeCost(this.pulseDurationLevel)
         if (!this.economy.trySpend(cost)) return false
         this.pulseDurationLevel += 1
-        this.pulseDurationPad.root.getWorldPosition(center)
-        this.onSpendVfx?.('pulseDuration', cost, center.clone())
+        this.onSpendVfx?.(
+          'pulseDuration',
+          cost,
+          this.padWorld.pulseDuration.clone(),
+        )
         return true
       }
     }
@@ -262,11 +276,27 @@ export class UpgradeZoneSystem {
     this.player.getPosition(p)
 
     const occK = 1 - Math.exp(-8 * dt)
-    this.occCapacity = this.stepPadOcc(this.capacityPad, this.occCapacity, occK)
-    this.occSpeed = this.stepPadOcc(this.speedPad, this.occSpeed, occK)
-    this.occPulseFreq = this.stepPadOcc(this.pulseFreqPad, this.occPulseFreq, occK)
+    this.occCapacity = this.stepPadOcc(
+      this.capacityPad,
+      this.padWorld.capacity,
+      this.occCapacity,
+      occK,
+    )
+    this.occSpeed = this.stepPadOcc(
+      this.speedPad,
+      this.padWorld.speed,
+      this.occSpeed,
+      occK,
+    )
+    this.occPulseFreq = this.stepPadOcc(
+      this.pulseFreqPad,
+      this.padWorld.pulseFreq,
+      this.occPulseFreq,
+      occK,
+    )
     this.occPulseDuration = this.stepPadOcc(
       this.pulseDurationPad,
+      this.padWorld.pulseDuration,
       this.occPulseDuration,
       occK,
     )
@@ -274,29 +304,28 @@ export class UpgradeZoneSystem {
     let bestKind: UpgradeSpendKind | null = null
     let bestD = Number.POSITIVE_INFINITY
 
-    this.capacityPad.root.getWorldPosition(center)
-    let d = Math.hypot(p.x - center.x, p.z - center.z)
+    let d = Math.hypot(p.x - this.padWorld.capacity.x, p.z - this.padWorld.capacity.z)
     if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
       bestKind = 'capacity'
       bestD = d
     }
 
-    this.speedPad.root.getWorldPosition(center)
-    d = Math.hypot(p.x - center.x, p.z - center.z)
+    d = Math.hypot(p.x - this.padWorld.speed.x, p.z - this.padWorld.speed.z)
     if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
       bestKind = 'speed'
       bestD = d
     }
 
-    this.pulseFreqPad.root.getWorldPosition(center)
-    d = Math.hypot(p.x - center.x, p.z - center.z)
+    d = Math.hypot(p.x - this.padWorld.pulseFreq.x, p.z - this.padWorld.pulseFreq.z)
     if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
       bestKind = 'pulseFreq'
       bestD = d
     }
 
-    this.pulseDurationPad.root.getWorldPosition(center)
-    d = Math.hypot(p.x - center.x, p.z - center.z)
+    d = Math.hypot(
+      p.x - this.padWorld.pulseDuration.x,
+      p.z - this.padWorld.pulseDuration.z,
+    )
     if (d <= UPGRADE_PAD_ZONE_RADIUS && d < bestD) {
       bestKind = 'pulseDuration'
     }
@@ -321,11 +350,11 @@ export class UpgradeZoneSystem {
 
   private stepPadOcc(
     pad: UpgradeZoneSystemOptions['capacityPad'],
+    padCenter: Vector3,
     cur: number,
     k: number,
   ): number {
-    pad.root.getWorldPosition(center)
-    const d = Math.hypot(p.x - center.x, p.z - center.z)
+    const d = Math.hypot(p.x - padCenter.x, p.z - padCenter.z)
     const target = d <= UPGRADE_PAD_ZONE_RADIUS ? 1 : 0
     const next = cur + (target - cur) * k
     pad.setOccupancy(next)

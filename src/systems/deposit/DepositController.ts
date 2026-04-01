@@ -1,5 +1,4 @@
 import { Vector3 } from 'three'
-import type { Group } from 'three'
 import type { Scene } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
 import {
@@ -36,7 +35,6 @@ export type DepositPresentationOverload = {
 }
 
 export type DepositControllerOptions = {
-  depositRoot: Group
   scene: Scene
   zoneRadius?: number
   player: PlayerController
@@ -60,7 +58,6 @@ export type DepositControllerOptions = {
 }
 
 export class DepositController {
-  private readonly depositRoot: Group
   private readonly scene: Scene
   private readonly zoneRadius: number
   private readonly player: PlayerController
@@ -82,7 +79,6 @@ export class DepositController {
   private peelIndex = 0
 
   constructor(opts: DepositControllerOptions) {
-    this.depositRoot = opts.depositRoot
     this.scene = opts.scene
     this.zoneRadius = opts.zoneRadius ?? DEFAULT_DEPOSIT_ZONE_RADIUS
     this.player = opts.player
@@ -98,7 +94,8 @@ export class DepositController {
   }
 
   update(dt: number): void {
-    this.depositRoot.getWorldPosition(center)
+    /** Deposit root stays at origin — avoid `getWorldPosition` matrix walks each frame. */
+    center.set(0, 0, 0)
     this.player.getPosition(p)
     const dx = p.x - center.x
     const dz = p.z - center.z
@@ -188,7 +185,7 @@ export class DepositController {
     }
     const mesh = this.stackVisual.extractTopMeshForDeposit(item)
     this.stack.notifyChange()
-    this.depositRoot.getWorldPosition(center)
+    center.set(0, 0, 0)
     const spiralIndex = this.peelIndex
     this.peelIndex += 1
     const onFlightDone = (flightMesh: import('three').Object3D): void => {

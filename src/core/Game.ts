@@ -43,6 +43,11 @@ import {
   disposeGhostGltfTemplate,
   type GhostGltfTemplate,
 } from '../systems/ghost/ghostGltfAsset.ts'
+import {
+  disposePlayerGltfTemplate,
+  PLAYER_PICKUP_ANIM_WINDOW_SEC,
+  type PlayerGltfTemplate,
+} from '../systems/player/playerGltfAsset.ts'
 import { disposeGhostSharedGeometry } from '../systems/ghost/createGhostVisual.ts'
 import { GhostSystem } from '../systems/ghost/GhostSystem.ts'
 import type { AreaId } from '../systems/world/RoomSystem.ts'
@@ -103,6 +108,7 @@ export class Game {
   private readonly relicFootArrow: ReturnType<typeof createSpecialRelicFootArrow>
   private readonly ghostSystem: GhostSystem
   private readonly ghostGltfTemplate: GhostGltfTemplate | null
+  private readonly playerGltfTemplate: PlayerGltfTemplate | null
   /** Tracks pulse edge for one-shot SFX */
   private prevGhostPulseActive = false
   private powerTintEl: HTMLElement | null = null
@@ -135,6 +141,8 @@ export class Game {
   private readonly velScratch = new Vector3()
   private readonly playerPos = new Vector3()
   private idleSec = 0
+  /** GLB “collecting” clip window after any wisp/relic pickup */
+  private playerPickupAnimTime = 0
   private objectiveEl: HTMLElement | null = null
   private idleHintEl: HTMLElement | null = null
   private hudCarryValueEl: HTMLElement | null = null
@@ -152,8 +160,13 @@ export class Game {
   private lastGhostInvuln = false
   private readonly perf = new PerfMonitor()
 
-  constructor(host: HTMLElement, ghostGltfTemplate: GhostGltfTemplate | null = null) {
+  constructor(
+    host: HTMLElement,
+    ghostGltfTemplate: GhostGltfTemplate | null = null,
+    playerGltfTemplate: PlayerGltfTemplate | null = null,
+  ) {
     this.hostEl = host
+    this.playerGltfTemplate = playerGltfTemplate
     this.gameViewport =
       host.querySelector<HTMLElement>('#game-viewport') ?? host
     const {
@@ -168,7 +181,7 @@ export class Game {
       depositRingMesh,
       playerCharacter,
       upgradePads,
-    } = createScene()
+    } = createScene(playerGltfTemplate)
 
     this.scene = scene
     this.burstGroup = new Group()
@@ -287,7 +300,6 @@ export class Game {
 
     this.depositFlight = new DepositFlightAnimator()
     this.depositController = new DepositController({
-      depositRoot,
       scene: this.scene,
       player: this.player,
       stack: this.stack,
@@ -421,6 +433,10 @@ export class Game {
       },
     })
 
+    /** Precompile materials so the first walk out of the hub does not hitch on shader link. */
+    this.scene.updateMatrixWorld(true)
+    this.renderer.compile(this.scene, this.camera)
+
     this.hudUpgradeBtnEl?.addEventListener('click', (e) => {
       e.stopPropagation()
       if (this.hudUpgradeBtnEl?.disabled) return
@@ -437,6 +453,7 @@ export class Game {
       const dt = Math.min(0.05, (now - this.lastTime) / 1000)
       this.lastTime = now
       this.elapsedSec += dt
+      this.playerPickupAnimTime = Math.max(0, this.playerPickupAnimTime - dt)
       this.perf.beginFrame(now)
 
       const j = this.joystick.getVector()
@@ -611,6 +628,9 @@ export class Game {
           playJuiceSound('pickup')
         }
       }
+      if (collected.length > 0) {
+        this.playerPickupAnimTime = PLAYER_PICKUP_ANIM_WINDOW_SEC
+      }
 
       this.player.getVelocity(this.velScratch)
       this.playerCharacter.update(dt, {
@@ -621,6 +641,7 @@ export class Game {
         maxCarry: this.stack.maxCapacity,
         powerMode: pulseGameplayActive,
         ghostInvuln: this.ghostHitInvuln > 0,
+        recentPickupSec: this.playerPickupAnimTime,
       })
       this.cameraRig.update(dt)
       this.moneyHud?.update(dt)
@@ -825,6 +846,8 @@ export class Game {
     this.burstGroup.removeFromParent()
     this.ghostSystem.dispose()
     disposeGhostGltfTemplate(this.ghostGltfTemplate)
+    this.playerCharacter.dispose()
+    disposePlayerGltfTemplate(this.playerGltfTemplate)
     disposeGhostSharedGeometry()
     this.joystick.dispose()
     this.unsubscribeResize()

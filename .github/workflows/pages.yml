@@ -1,9 +1,11 @@
-# Deploy Vite builds to subfolders on gh-pages so both versions coexist:
-#   https://<user>.github.io/scrabble-collector/version1/
-#   https://<user>.github.io/scrabble-collector/version2/
+# Deploy Vite builds to subfolders on gh-pages so all versions coexist, e.g.:
+#   https://<user>.github.io/<repo>/version1/
+#   https://<user>.github.io/<repo>/version2/
+#   https://<user>.github.io/<repo>/version7-simplified/
 #
-# - Push to `main`  → build with base /scrabble-collector/version1/ → deploy to version1/
-# - Push to `version2` → build with base /scrabble-collector/version2/ → deploy to version2/
+# - Push to `main`              → base /repo/version1/           → deploy to version1/
+# - Push to `version2`         → base /repo/version2/           → deploy to version2/
+# - Push to `version7-simplfied` → base /repo/version7-simplified/ → deploy to version7-simplified/
 #
 # Repo Settings → Pages → Source: Deploy from branch → gh-pages / (root)
 # (Switch from “GitHub Actions” artifact deploy if you used that before.)
@@ -12,7 +14,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, version2]
+    branches: [main, version2, version7-simplfied]
 
 permissions:
   contents: write
@@ -37,12 +39,19 @@ jobs:
         id: paths
         run: |
           REPO="${{ github.event.repository.name }}"
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          REF="${{ github.ref_name }}"
+          if [ "$REF" = "main" ]; then
             echo "base=/${REPO}/version1/" >> $GITHUB_OUTPUT
             echo "dest=version1" >> $GITHUB_OUTPUT
-          else
+          elif [ "$REF" = "version2" ]; then
             echo "base=/${REPO}/version2/" >> $GITHUB_OUTPUT
             echo "dest=version2" >> $GITHUB_OUTPUT
+          elif [ "$REF" = "version7-simplfied" ]; then
+            echo "base=/${REPO}/version7-simplified/" >> $GITHUB_OUTPUT
+            echo "dest=version7-simplified" >> $GITHUB_OUTPUT
+          else
+            echo "Branch not configured for Pages deploy: $REF" >&2
+            exit 1
           fi
 
       - name: Install

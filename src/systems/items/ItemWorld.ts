@@ -9,6 +9,7 @@ import {
 } from 'three'
 import type { Vector3 } from 'three'
 import type { GameItem } from '../../core/types/GameItem.ts'
+import { disposeRelicGltfClone } from '../relic/relicGltfAsset.ts'
 import { disposeWispGltfClone } from '../wisp/wispGltfAsset.ts'
 import { createPickupMesh } from './ItemVisuals.ts'
 import {
@@ -31,6 +32,7 @@ export class ItemWorld {
   private readonly collectAnims: CollectAnim[] = []
   private readonly pendingDisposals: Object3D[] = []
   private readonly pooledWispMeshes: Object3D[] = []
+  private readonly pooledRelicMeshes: [Object3D[], Object3D[]] = [[], []]
 
   constructor(pickupGroup: Group, scene: Scene) {
     this.pickupGroup = pickupGroup
@@ -63,7 +65,7 @@ export class ItemWorld {
     const y = mesh.position.y
     mesh.position.set(x, y, z)
     mesh.visible = true
-    attachPickupIdleMotion(mesh, 'wisp')
+    attachPickupIdleMotion(mesh, item.type === 'wisp' ? 'wisp' : 'pellet')
     this.pickupGroup.add(mesh)
     this.byId.set(item.id, { mesh, item })
   }
@@ -166,6 +168,8 @@ export class ItemWorld {
     for (const [, { mesh, item }] of this.byId) {
       const wispMixer = mesh.userData.wispMixer as AnimationMixer | undefined
       if (wispMixer) wispMixer.update(dt)
+      const relicMixer = mesh.userData.relicMixer as AnimationMixer | undefined
+      if (relicMixer) relicMixer.update(dt)
       updatePickupIdleMotion(mesh, timeSec, dt)
       if (item.type === 'wisp') {
         const body = mesh.userData.wispBody as Mesh | undefined
@@ -198,20 +202,29 @@ export class ItemWorld {
           }
         }
       } else if (item.type === 'relic') {
-        const gem = mesh.userData.relicGem as Mesh | undefined
-        const rHalo = mesh.userData.relicHalo as Mesh | undefined
-        const h = item.hue * 30
-        if (gem) {
-          gem.rotation.y += dt * 1.1
-          const pulse = 0.94 + 0.06 * Math.sin(timeSec * 4.2 + h)
-          gem.scale.setScalar(pulse)
-        }
-        if (rHalo) {
-          const hp = 0.88 + 0.12 * Math.sin(timeSec * 3.1)
-          rHalo.scale.setScalar(hp)
-          const hm = rHalo.material
-          if (hm && !Array.isArray(hm) && 'emissiveIntensity' in hm) {
-            hm.emissiveIntensity = 0.5 + 0.35 * (0.5 + 0.5 * Math.sin(timeSec * 5.2))
+        if (mesh.userData.relicGltf === true) {
+          const baseScale = (mesh.userData.relicBaseScale as number | undefined) ?? 1
+          const h = item.hue * 30
+          const w =
+            baseScale * (0.982 + 0.018 * Math.sin(timeSec * 3.6 + h))
+          mesh.scale.setScalar(w)
+        } else {
+          const gem = mesh.userData.relicGem as Mesh | undefined
+          const rHalo = mesh.userData.relicHalo as Mesh | undefined
+          const h = item.hue * 30
+          if (gem) {
+            gem.rotation.y += dt * 1.1
+            const pulse = 0.94 + 0.06 * Math.sin(timeSec * 4.2 + h)
+            gem.scale.setScalar(pulse)
+          }
+          if (rHalo) {
+            const hp = 0.88 + 0.12 * Math.sin(timeSec * 3.1)
+            rHalo.scale.setScalar(hp)
+            const hm = rHalo.material
+            if (hm && !Array.isArray(hm) && 'emissiveIntensity' in hm) {
+              hm.emissiveIntensity =
+                0.5 + 0.35 * (0.5 + 0.5 * Math.sin(timeSec * 5.2))
+            }
           }
         }
       }
@@ -221,6 +234,10 @@ export class ItemWorld {
   private disposeMesh(root: Object3D): void {
     if (root.userData.wispGltf === true) {
       disposeWispGltfClone(root)
+      return
+    }
+    if (root.userData.relicGltf === true) {
+      disposeRelicGltfClone(root)
       return
     }
     root.removeFromParent()
@@ -249,6 +266,19 @@ export class ItemWorld {
       )
       return mesh
     }
+    if (item.type === 'relic') {
+      const v = item.relicVariant
+      const pool = this.pooledRelicMeshes[v]
+      if (pool.length > 0) {
+        const mesh = pool.pop()!
+        mesh.position.set(0, mesh.position.y, 0)
+        mesh.scale.setScalar(
+          (mesh.userData.relicBaseScale as number | undefined) ?? 1,
+        )
+        mesh.visible = true
+        return mesh
+      }
+    }
     return createPickupMesh(item)
   }
 
@@ -260,6 +290,16 @@ export class ItemWorld {
       if (mix) mix.stopAllAction()
       delete root.userData.pickupIdle
       this.pooledWispMeshes.push(root)
+      return true
+    }
+    if (root.userData.relicGltf === true) {
+      root.removeFromParent()
+      root.visible = false
+      const mix = root.userData.relicMixer as AnimationMixer | undefined
+      if (mix) mix.stopAllAction()
+      delete root.userData.pickupIdle
+      const v = root.userData.relicVariant as 0 | 1
+      this.pooledRelicMeshes[v].push(root)
       return true
     }
     return false
