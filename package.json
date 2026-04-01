@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:gh-v7": "vite preview --host --base /scrabble-collector/version7-simplified/"
   },
   "devDependencies": {
     "@types/three": "^0.183.1",
