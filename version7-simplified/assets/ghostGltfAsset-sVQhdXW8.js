@@ -1,0 +1,1 @@
+import{n as e,t}from"./ghostGltfAsset-Q262lS5I.js";export{t as disposeGhostGltfTemplate,e as loadGhostEnemyGltf};

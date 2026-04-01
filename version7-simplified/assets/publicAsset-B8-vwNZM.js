@@ -1,0 +1,1 @@
+function e(e){return`/scrabble-collector/version7-simplified/${e.startsWith(`/`)?e.slice(1):e}`}export{e as t};
