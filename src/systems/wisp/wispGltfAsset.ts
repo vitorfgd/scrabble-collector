@@ -14,9 +14,10 @@ import {
   Vector3,
 } from 'three'
 import { clone as cloneSkeletonSafe } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { publicAsset } from '../../core/publicAsset.ts'
 
 /** Served from `public/` (Vite). */
-export const WISP_GLTF_URL = '/assets/wisps/whisp.glb'
+export const WISP_GLTF_URL = publicAsset('assets/wisps/whisp.glb')
 
 /** World pickups — readable on floor. */
 const WISP_TARGET_MAX_DIM = 0.72

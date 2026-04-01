@@ -2,6 +2,7 @@
  * Ghost AI tuning — adjust here; speeds also in `gameplaySpeed.ts` (player vs ghost balance).
  */
 
+import { publicAsset } from '../../core/publicAsset.ts'
 import { roomCenter } from '../world/mansionRoomData.ts'
 
 export {
@@ -70,7 +71,7 @@ export const DEFAULT_GHOST_SPAWNS: readonly GhostSpawnSpec[] = [
 export const GHOST_VISUAL_SCALE = 0.93
 
 /** Served from `public/` (Vite). */
-export const GHOST_GLTF_URL = '/assets/enemies/ghost.glb'
+export const GHOST_GLTF_URL = publicAsset('assets/enemies/ghost.glb')
 
 /** GLB root Y offset so feet sit on the floor. */
 export const GHOST_GLB_Y_OFFSET = 0

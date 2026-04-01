@@ -14,13 +14,14 @@ import {
   Vector3,
 } from 'three'
 import { clone as cloneSkeletonSafe } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { publicAsset } from '../../core/publicAsset.ts'
 
 /** `0` = calice, `1` = coin — matches `RelicItem.relicVariant` */
 export type RelicVariantIndex = 0 | 1
 
 export const RELIC_GLTF_URLS: readonly [string, string] = [
-  '/assets/relics/calice.glb',
-  '/assets/relics/coin.glb',
+  publicAsset('assets/relics/calice.glb'),
+  publicAsset('assets/relics/coin.glb'),
 ]
 
 /** Reference scale from earlier tuning (world units, max bbox axis after fit). */

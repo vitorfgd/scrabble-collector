@@ -1,5 +1,6 @@
 import type { AnimationClip, Group } from 'three'
 import { Mesh } from 'three'
+import { publicAsset } from '../../core/publicAsset.ts'
 
 export type PlayerGltfTemplate = {
   /** Root from GLTF; never added to scene — clone only. */
@@ -7,7 +8,7 @@ export type PlayerGltfTemplate = {
   animations: readonly AnimationClip[]
 }
 
-export const PLAYER_GLTF_URL = '/assets/player/character.glb'
+export const PLAYER_GLTF_URL = publicAsset('assets/player/character.glb')
 
 /** How long the “collecting” clip stays primary after a wisp/relic pickup */
 export const PLAYER_PICKUP_ANIM_WINDOW_SEC = 0.55
